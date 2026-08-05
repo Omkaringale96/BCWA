@@ -22,6 +22,48 @@ app.config['SECRET_KEY'] = 'bcwa_portal_secret_key_2026'
 init_db()
 generate_seed_data()
 
+# -----------------------------------------------------------------------------
+# AUTHENTICATION API
+# -----------------------------------------------------------------------------
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    data = request.json or {}
+    username = (data.get('username') or data.get('officer_id') or '').strip()
+    password = (data.get('password') or '').strip()
+
+    if not username or not password:
+        return jsonify({'success': False, 'error': 'Officer ID / Email and Password required'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM users 
+        WHERE (LOWER(id) = LOWER(?) OR LOWER(email) = LOWER(?)) AND password = ?
+    """, (username, username, password))
+    user = cursor.fetchone()
+    conn.close()
+
+    if user and user['status'] == 'Active':
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn = get_db_connection()
+        conn.cursor().execute("UPDATE users SET last_login = ? WHERE id = ?", (now_str, user['id']))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'user': {
+                'id': user['id'],
+                'officer_id': user['id'],
+                'name': user['name'],
+                'email': user['email'],
+                'role': user['role'],
+                'status': user['status']
+            }
+        })
+
+    return jsonify({'success': False, 'error': 'Invalid Officer ID or Password'}), 401
+
 @app.route('/api/ocr/extract', methods=['POST'])
 def ocr_extract():
     doc_type = request.form.get('doc_type', 'Drug License')

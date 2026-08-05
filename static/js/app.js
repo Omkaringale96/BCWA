@@ -4,18 +4,106 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const BCWAApp = {
     currentTab: 'dashboard',
+    currentUser: null,
     storesCache: [],
     pharmacistsCache: [],
 
     init() {
+        this.bindAuth();
         this.bindNavigation();
         this.bindGlobalSearch();
         this.bindModals();
         this.bindFormSubmissions();
         this.bindOCRScanner();
-        this.loadDashboardData();
+        this.checkAuth();
     },
 
+    // -------------------------------------------------------------------------
+    // AUTHENTICATION & LOGIN HANDLERS
+    // -------------------------------------------------------------------------
+    bindAuth() {
+        const loginForm = document.getElementById('form-login');
+        const logoutBtn = document.getElementById('btn-logout');
+
+        loginForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+            const alertBox = document.getElementById('login-error-alert');
+
+            alertBox.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ officer_id: username, username, password })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    this.currentUser = data.user;
+                    localStorage.setItem('bcwa_user', JSON.stringify(data.user));
+                    this.renderAuthenticatedUI();
+                } else {
+                    alertBox.textContent = data.error || 'Invalid Officer ID or Password';
+                    alertBox.classList.remove('hidden');
+                }
+            } catch (err) {
+                alertBox.textContent = 'Server connection error. Please try again.';
+                alertBox.classList.remove('hidden');
+            }
+        });
+
+        logoutBtn?.addEventListener('click', () => {
+            this.logout();
+        });
+    },
+
+    checkAuth() {
+        const stored = localStorage.getItem('bcwa_user');
+        if (stored) {
+            try {
+                this.currentUser = JSON.parse(stored);
+                this.renderAuthenticatedUI();
+                return;
+            } catch (e) {
+                localStorage.removeItem('bcwa_user');
+            }
+        }
+        this.showLoginScreen();
+    },
+
+    showLoginScreen() {
+        document.getElementById('login-screen')?.classList.remove('hidden');
+        document.querySelector('.app-layout')?.classList.add('hidden');
+        lucide.createIcons();
+    },
+
+    renderAuthenticatedUI() {
+        document.getElementById('login-screen')?.classList.add('hidden');
+        document.querySelector('.app-layout')?.classList.remove('hidden');
+
+        if (this.currentUser) {
+            document.getElementById('sidebar-avatar').textContent = this.currentUser.name ? this.currentUser.name.charAt(0).toUpperCase() : 'V';
+            document.getElementById('sidebar-user-name').textContent = this.currentUser.name || 'Vinayak';
+            document.getElementById('sidebar-user-role').innerHTML = `Officer ID: <strong>${this.currentUser.officer_id || 'VIN2821'}</strong> &bull; ${this.currentUser.role || 'Administrator'}`;
+        }
+
+        this.loadDashboardData();
+        lucide.createIcons();
+    },
+
+    logout() {
+        localStorage.removeItem('bcwa_user');
+        this.currentUser = null;
+        this.showLoginScreen();
+    },
+
+    // -------------------------------------------------------------------------
+    // NAVIGATION & TAB ROUTING (STRICTLY 8 PANES)
+    // -------------------------------------------------------------------------
     bindNavigation() {
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', (e) => {
