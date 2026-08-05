@@ -551,12 +551,15 @@ def retry_failed_queue_item(queue_id):
             return False, "Queue item not found"
 
         item = res.data[0]
-        db_table('notification_queue').update({'status': 'Pending', 'retry_count': 0}).eq('id', queue_id).execute()
+        db_table('notification_queue').update({'status': 'Pending', 'retry_count': 0, 'next_retry_at': None}).eq('id', queue_id).execute()
         proc_res = process_notification_queue()
-        if proc_res.get('sent', 0) > 0:
+        
+        q_after = db_table('notification_queue').select('*').eq('id', queue_id).execute()
+        if q_after.data and q_after.data[0].get('status') == 'Sent':
             return True, "Email resent successfully"
         else:
-            return False, "Retry attempt failed. Check error logs."
+            err_msg = q_after.data[0].get('error_message') if q_after.data else None
+            return False, err_msg or "Retry attempt failed. Check SMTP configuration."
     except Exception as e:
         return False, str(e)
 

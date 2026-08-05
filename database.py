@@ -227,7 +227,8 @@ def resend_notification_log(log_id):
     if not log:
         return False, "Notification log entry not found"
 
-    from notification_engine import send_smtp_email, generate_reminder_html_email
+    from notification_engine import generate_reminder_html_email
+    import email_service
     
     recip_email = log.get('recipient_email')
     recip_name = log.get('recipient_name', 'Valued Member')
@@ -241,7 +242,7 @@ def resend_notification_log(log_id):
     subject = f"BCWA Resent Renewal Reminder – {doc_type}"
     html = generate_reminder_html_email(recip_name, store_name, doc_type, f"REF-{log_id}", "As Specified", days_rem)
 
-    ok, err_msg = send_smtp_email(recip_email, subject, html)
+    ok, err_msg = email_service.send_html_email(recip_email, subject, html)
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     update_payload = {
