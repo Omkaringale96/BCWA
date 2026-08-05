@@ -74,7 +74,8 @@ def generate_seed_data():
         shop_code = f"BCWA-BSR-{100 + i}"
         store_name = f"{STORE_PREFIXES[(i-1) % len(STORE_PREFIXES)]} {STORE_SUFFIXES[(i-1) % len(STORE_SUFFIXES)]}"
         owner_name = f"{FIRST_NAMES[(i*2) % len(FIRST_NAMES)]} {LAST_NAMES[(i*3) % len(LAST_NAMES)]}"
-        owner_mobile = f"9822{random.randint(100000, 999999)}"
+        owner_mobile = "8766759824"
+        owner_email = "bhosalevinayakwe@gmail.com"
         
         dl_20b = f"MH-TZ4-{random.randint(100000, 999999)}"
         dl_21b = f"MH-TZ4-{random.randint(100000, 999999)}"
@@ -98,7 +99,7 @@ def generate_seed_data():
             'owner_name': owner_name,
             'owner_mobile': owner_mobile,
             'owner_whatsapp': owner_mobile,
-            'owner_email': f"owner{i}@gmail.com",
+            'owner_email': owner_email,
             'owner_pan': f"ABCDE{random.randint(1000,9999)}F",
             'owner_aadhaar': f"4321 {random.randint(1000,9999)} {random.randint(1000,9999)}",
             'owner_address': f"Plot {i*4}, Boisar West, Palghar",
@@ -106,7 +107,7 @@ def generate_seed_data():
             'store_logo': "",
             'store_photo': "",
             'contact_phone': owner_mobile,
-            'contact_email': f"info@{store_name.lower().replace(' ', '').replace('&','')}.in",
+            'contact_email': owner_email,
             'address_line1': f"Shop No. {i}, Ostwal Empire",
             'address_line2': AREAS_BOISAR[i % len(AREAS_BOISAR)],
             'area': "Boisar",
@@ -154,8 +155,8 @@ def generate_seed_data():
                 'qualification': QUALIFICATIONS[random.randint(0, len(QUALIFICATIONS)-1)],
                 'joining_date': (now - timedelta(days=random.randint(100, 800))).strftime('%Y-%m-%d'),
                 'leaving_date': None,
-                'mobile': f"9765{random.randint(100000, 999999)}",
-                'email': f"{ph_name.lower().replace(' ', '')}@gmail.com",
+                'mobile': "8766759824",
+                'email': "bhosalevinayakwe@gmail.com",
                 'status': "Active",
                 'ppp_card_url': f"/static/docs/ppp_{ph_id}.pdf",
                 'degree_cert_url': f"/static/docs/degree_{ph_id}.pdf",
@@ -216,6 +217,29 @@ def generate_seed_data():
 
     print(f"Generating exact 20 Medical Stores synthetic dataset for BCWA Portal...")
     print(f"Seed generation complete: Exactly {len(stores_list)} Medical Stores, {len(pharmacists_list)} Pharmacists, {len(documents_list)} Documents created successfully.")
+
+    # Ensure ALL existing stores and pharmacists in database are updated with target mobile and email
+    try:
+        existing_stores = db_table('medical_stores').select('*').execute().data or []
+        for s in existing_stores:
+            s_id = s.get('id')
+            db_table('medical_stores').update({
+                'owner_mobile': '8766759824',
+                'owner_whatsapp': '8766759824',
+                'owner_email': 'bhosalevinayakwe@gmail.com',
+                'contact_phone': '8766759824',
+                'contact_email': 'bhosalevinayakwe@gmail.com'
+            }).eq('id', s_id).execute()
+
+        existing_pharmacists = db_table('pharmacists').select('*').execute().data or []
+        for p in existing_pharmacists:
+            p_id = p.get('id')
+            db_table('pharmacists').update({
+                'mobile': '8766759824',
+                'email': 'bhosalevinayakwe@gmail.com'
+            }).eq('id', p_id).execute()
+    except Exception as e:
+        print(f"[SEED UPDATE NOTICE] {e}")
 
 if __name__ == '__main__':
     generate_seed_data()
