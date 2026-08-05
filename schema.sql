@@ -159,11 +159,40 @@ CREATE TABLE IF NOT EXISTS notification_logs (
     recipient_email TEXT NOT NULL,
     recipient_name TEXT NOT NULL,
     document_type TEXT NOT NULL,
+    document_number TEXT,
     days_remaining INTEGER NOT NULL,
+    email_subject TEXT,
+    email_status TEXT DEFAULT 'Sent',
     status TEXT DEFAULT 'Sent',
+    smtp_response TEXT,
+    retry_count INTEGER DEFAULT 0,
     sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     delivery_status TEXT DEFAULT 'Success',
-    error_message TEXT
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10. NOTIFICATION QUEUE TABLE (Decoupled Queue & Retry System)
+CREATE TABLE IF NOT EXISTS notification_queue (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES medical_stores(id) ON DELETE CASCADE,
+    pharmacist_id TEXT REFERENCES pharmacists(id) ON DELETE SET NULL,
+    document_id TEXT,
+    recipient_email TEXT NOT NULL,
+    recipient_name TEXT NOT NULL,
+    document_type TEXT NOT NULL,
+    document_number TEXT,
+    days_remaining INTEGER NOT NULL,
+    email_subject TEXT NOT NULL,
+    email_body_html TEXT,
+    status TEXT DEFAULT 'Pending',
+    retry_count INTEGER DEFAULT 0,
+    max_retries INTEGER DEFAULT 3,
+    next_retry_at TIMESTAMP WITH TIME ZONE,
+    error_message TEXT,
+    smtp_response TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP WITH TIME ZONE
 );
 
 -- INDEXES FOR OPTIMIZED QUERY PERFORMANCE
@@ -179,6 +208,8 @@ CREATE INDEX IF NOT EXISTS idx_notifications_store_id ON notifications(store_id)
 CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notif_logs_store ON notification_logs(store_id);
 CREATE INDEX IF NOT EXISTS idx_notif_logs_dup ON notification_logs(store_id, document_type, days_remaining);
+CREATE INDEX IF NOT EXISTS idx_notif_queue_status ON notification_queue(status);
+CREATE INDEX IF NOT EXISTS idx_notif_queue_retry ON notification_queue(status, next_retry_at);
 
 -- ============================================================================
 -- GRANT TABLE PERMISSIONS & DISABLE RLS FOR BACKEND ACCESS
@@ -197,3 +228,4 @@ ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_queue DISABLE ROW LEVEL SECURITY;

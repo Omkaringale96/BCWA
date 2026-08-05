@@ -42,7 +42,8 @@ _mock_storage = {
     'notifications': [],
     'activity_logs': [],
     'settings': [],
-    'notification_logs': []
+    'notification_logs': [],
+    'notification_queue': []
 }
 
 def get_supabase_credentials():
@@ -126,42 +127,59 @@ class SupabaseTableProxy:
         return SupabaseQueryBuilder(self.table_name, columns)
 
     def insert(self, data):
+        return SupabaseInsertBuilder(self.table_name, data)
+
+    def upsert(self, data):
+        return SupabaseUpsertBuilder(self.table_name, data)
+
+    def update(self, data):
+        return SupabaseUpdateBuilder(self.table_name, data)
+
+class SupabaseInsertBuilder:
+    def __init__(self, table_name, data):
+        self.table_name = table_name
+        self.data = data
+
+    def execute(self):
         client = get_supabase_client()
         if client:
             try:
-                res = client.table(self.table_name).insert(data).execute()
-                return res.data
+                res = client.table(self.table_name).insert(self.data).execute()
+                return SupabaseResponse(res.data)
             except Exception as e:
                 logging.error(f"Supabase insert error in {self.table_name}: {e}")
                 logging.error(traceback.format_exc())
 
-        if isinstance(data, list):
-            _mock_storage[self.table_name].extend(data)
-        else:
-            _mock_storage[self.table_name].append(data)
-        return [data] if isinstance(data, dict) else data
+        rows = _mock_storage.setdefault(self.table_name, [])
+        items = self.data if isinstance(self.data, list) else [self.data]
+        rows.extend(items)
+        return SupabaseResponse(items)
 
-    def upsert(self, data):
+class SupabaseUpsertBuilder:
+    def __init__(self, table_name, data):
+        self.table_name = table_name
+        self.data = data
+
+    def execute(self):
         client = get_supabase_client()
         if client:
             try:
-                res = client.table(self.table_name).upsert(data).execute()
-                return res.data
+                res = client.table(self.table_name).upsert(self.data).execute()
+                return SupabaseResponse(res.data)
             except Exception as e:
                 logging.error(f"Supabase upsert error in {self.table_name}: {e}")
                 logging.error(traceback.format_exc())
 
-        items = data if isinstance(data, list) else [data]
+        rows = _mock_storage.setdefault(self.table_name, [])
+        items = self.data if isinstance(self.data, list) else [self.data]
         for item in items:
-            item_id = item.get('id')
-            existing = [i for i in _mock_storage[self.table_name] if i.get('id') == item_id]
+            item_id = item.get('id') or item.get('key')
+            existing = [i for i in rows if (i.get('id') and i.get('id') == item_id) or (i.get('key') and i.get('key') == item_id)]
             if existing:
                 existing[0].update(item)
             else:
-                _mock_storage[self.table_name].append(item)
-        return items
-
-    def update(self, data):
+                rows.append(item)
+        return SupabaseResponse(items)
         return SupabaseUpdateBuilder(self.table_name, data)
 
     def delete(self):
@@ -195,6 +213,10 @@ class SupabaseQueryBuilder:
         self.filters.append(('lt', column, value))
         return self
 
+    def in_(self, column, values):
+        self.filters.append(('in', column, values))
+        return self
+
     def order(self, column, desc=False):
         self.order_by = (column, desc)
         return self
@@ -214,6 +236,7 @@ class SupabaseQueryBuilder:
                     elif op == 'lte': q = q.lte(col, val)
                     elif op == 'gte': q = q.gte(col, val)
                     elif op == 'lt': q = q.lt(col, val)
+                    elif op == 'in': q = q.in_(col, val)
 
                 if self.order_by:
                     q = q.order(self.order_by[0], desc=self.order_by[1])
@@ -237,6 +260,7 @@ class SupabaseQueryBuilder:
                 elif op == 'lte' and str(r_val or '') > str(val or ''): match = False
                 elif op == 'gte' and str(r_val or '') < str(val or ''): match = False
                 elif op == 'lt' and str(r_val or '') >= str(val or ''): match = False
+                elif op == 'in' and (r_val not in val and str(r_val) not in val): match = False
             if match:
                 filtered.append(r)
 

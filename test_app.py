@@ -140,16 +140,22 @@ class BCWAPortalTestCase(unittest.TestCase):
         print("Deployment Invalidation Test Passed.")
 
     def test_renewal_notification_engine(self):
-        from notification_engine import scan_and_send_expiring_reminders
-        summary = scan_and_send_expiring_reminders()
+        from notification_engine import run_reminder_engine
+        summary = run_reminder_engine()
+        self.assertIn('queued', summary)
         self.assertIn('sent', summary)
-        self.assertIn('skipped', summary)
 
         res_logs = self.app.get('/api/notifications/logs')
         self.assertEqual(res_logs.status_code, 200)
         logs_data = res_logs.get_json()
         self.assertIn('logs', logs_data)
-        print("Automated Renewal Notification Engine Test Passed.")
+
+        res_q = self.app.get('/api/notifications/queue')
+        self.assertEqual(res_q.status_code, 200)
+        q_data = res_q.get_json()
+        self.assertIn('queue', q_data)
+
+        print("Automated Renewal Notification Engine & Queue Test Passed.")
 
     def test_send_test_email(self):
         from app import reset_login_lockout
@@ -164,6 +170,16 @@ class BCWAPortalTestCase(unittest.TestCase):
         data = res.get_json()
         self.assertIn('success', data)
         print("Admin Send Test Email Test Passed.")
+
+    def test_email_service_and_queue(self):
+        import email_service
+        import notification_service
+        ok, msg = email_service.send_html_email('test@example.com', 'Test Subject', '<h1>HTML</h1>')
+        self.assertTrue(ok)
+
+        ok2, msg2 = notification_service.send({'recipient_email': 'test@example.com', 'email_subject': 'Subject', 'email_body_html': '<p>Body</p>'})
+        self.assertTrue(ok2)
+        print("Email & Notification Service Multi-Channel Abstraction Test Passed.")
 
 if __name__ == '__main__':
     unittest.main()

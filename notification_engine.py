@@ -1,32 +1,31 @@
 import os
-import smtplib
+import uuid
 import logging
-import random
 import threading
 import time
 from datetime import datetime, timedelta
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from supabase_client import db_table
+import notification_service
+import email_service
 
 # -----------------------------------------------------------------------------
 # REMINDER SCHEDULE STAGES (DAYS BEFORE EXPIRY)
 # -----------------------------------------------------------------------------
 REMINDER_STAGES = [90, 60, 30, 15, 10, 7, 3, 1, 0]
 
-def get_smtp_config():
-    return {
-        'host': os.environ.get('SMTP_HOST', 'smtp.gmail.com'),
-        'port': int(os.environ.get('SMTP_PORT', 587)),
-        'username': os.environ.get('SMTP_USERNAME', ''),
-        'password': os.environ.get('SMTP_PASSWORD', ''),
-        'from_email': os.environ.get('EMAIL_FROM') or os.environ.get('SMTP_USERNAME') or 'noreply@bcwaportal.in'
-    }
+def match_reminder_stage(days_remaining):
+    """Determine matching stage or expired interval (every 7 days for expired)."""
+    if days_remaining in REMINDER_STAGES:
+        return days_remaining
+    elif days_remaining < 0 and (abs(days_remaining) % 7 == 0):
+        # Every 7 days for expired documents
+        return days_remaining
+    return None
 
-def generate_reminder_html_email(recipient_name, store_name, doc_name, doc_num, expiry_date_str, days_remaining, pharmacist_name=None):
+def generate_reminder_html_email(recipient_name, store_name, doc_name, doc_num, expiry_date_str, days_remaining, pharmacist_name=None, issue_date_str="As Per Records"):
     is_expired = days_remaining <= 0
     badge_bg = '#DC2626' if is_expired else ('#EA580C' if days_remaining <= 15 else '#2563EB')
-    status_text = "EXPIRED" if is_expired else f"Expires in {days_remaining} Days"
+    status_text = f"EXPIRED ({abs(days_remaining)} Days Ago)" if is_expired else (f"Expires Tomorrow" if days_remaining == 1 else f"Expires in {days_remaining} Days")
 
     ph_row = f"<tr><td style='padding:8px 0; color:#6B7280; font-weight:600;'>Assigned Pharmacist:</td><td style='padding:8px 0; font-weight:700; color:#1F2937;'>{pharmacist_name}</td></tr>" if pharmacist_name else ""
 
@@ -59,7 +58,7 @@ def generate_reminder_html_email(recipient_name, store_name, doc_name, doc_num, 
                 <p style="font-size: 16px; color: #1F2937;">Dear <strong>{recipient_name}</strong>,</p>
                 
                 <p style="color: #4B5563; line-height: 1.6;">
-                    This is an automated compliance notice regarding your registration document for <strong>{store_name}</strong>.
+                    This is an official automated compliance alert regarding your document registration for <strong>{store_name}</strong>.
                 </p>
 
                 <div style="text-align: center;">
@@ -70,65 +69,33 @@ def generate_reminder_html_email(recipient_name, store_name, doc_name, doc_num, 
                     <tr><td style="padding:8px 0; color:#6B7280; font-weight:600; width:40%;">Medical Store:</td><td style="padding:8px 0; font-weight:700; color:#1F2937;">{store_name}</td></tr>
                     {ph_row}
                     <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">Document Category:</td><td style="padding:8px 0; font-weight:700; color:#2563EB;">{doc_name}</td></tr>
-                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">License / Document No:</td><td style="padding:8px 0; font-weight:700; color:#1F2937;">{doc_num}</td></tr>
+                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">License / Doc No:</td><td style="padding:8px 0; font-weight:700; color:#1F2937;">{doc_num}</td></tr>
+                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">Issue Date:</td><td style="padding:8px 0; font-weight:500; color:#4B5563;">{issue_date_str}</td></tr>
                     <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">Expiry Date:</td><td style="padding:8px 0; font-weight:700; color:#DC2626;">{expiry_date_str}</td></tr>
+                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">Remaining Days:</td><td style="padding:8px 0; font-weight:700; color:#1F2937;">{days_remaining} Days</td></tr>
                 </table>
 
                 <div class="action-box">
-                    <h4 style="margin: 0 0 8px 0; color: #1E40AF;">Required Action:</h4>
+                    <h4 style="margin: 0 0 8px 0; color: #1E40AF;">Mandatory Action Required:</h4>
                     <p style="margin: 0; font-size: 13px; color: #1E3A8A; line-height: 1.5;">
-                        Please initiate your renewal process immediately via the FDA / MSPC portal and upload your renewed certificate to the BCWA Document Vault to maintain 100% compliance status.
+                        Please initiate your renewal process immediately via the official regulatory portal (FDA / MSPC) and upload your renewed certificate to the BCWA Document Vault to ensure uninterrupted operations.
                     </p>
                 </div>
 
                 <p style="font-size: 13px; color: #6B7280; margin-top: 24px;">
-                    Need help? Contact the BCWA Support Desk at <a href="mailto:support@bcwaportal.in" style="color:#2563EB;">support@bcwaportal.in</a> or visit the association office in Boisar West.
+                    Need assistance? Contact BCWA Support Desk at <a href="mailto:support@bcwaportal.in" style="color:#2563EB;">support@bcwaportal.in</a> or visit the association office in Boisar West.
                 </p>
             </div>
 
             <div class="footer">
                 <p>&copy; 2026 Boisar Welfare Chemist Association (BCWA). All Rights Reserved.</p>
-                <p>This is an automated system email. Please do not reply directly to this message.</p>
+                <p>This is an automated compliance notification. Please do not reply directly.</p>
             </div>
         </div>
     </body>
     </html>
     """
     return html
-
-def send_smtp_email(to_email, subject, html_body):
-    cfg = get_smtp_config()
-    
-    if not cfg['username'] or not cfg['password']:
-        # If no credentials configured, record as simulated success for development
-        logging.info(f"[SMTP NOTICE] Simulated email dispatch to {to_email} (SMTP credentials not configured in environment).")
-        return True, "Simulated Dispatch (No SMTP credentials configured)"
-
-    try:
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = subject
-        msg['From'] = cfg['from_email']
-        msg['To'] = to_email
-
-        part = MIMEText(html_body, 'html')
-        msg.attach(part)
-
-        if cfg['port'] == 465:
-            with smtplib.SMTP_SSL(cfg['host'], cfg['port'], timeout=10) as server:
-                server.login(cfg['username'], cfg['password'])
-                server.sendmail(cfg['from_email'], [to_email], msg.as_string())
-        else:
-            with smtplib.SMTP(cfg['host'], cfg['port'], timeout=10) as server:
-                server.starttls()
-                server.login(cfg['username'], cfg['password'])
-                server.sendmail(cfg['from_email'], [to_email], msg.as_string())
-
-        logging.info(f"[SMTP SUCCESS] Email sent to {to_email} - Subject: {subject}")
-        return True, "Delivered"
-    except Exception as e:
-        err_msg = str(e)
-        logging.error(f"[SMTP ERROR] Failed to send email to {to_email}: {err_msg}")
-        return False, err_msg
 
 def generate_smtp_test_html_email(recipient_email, server_time, environment, supabase_status, smtp_status, render_id):
     return f"""
@@ -185,7 +152,7 @@ def generate_smtp_test_html_email(recipient_email, server_time, environment, sup
     """
 
 def send_admin_test_email():
-    cfg = get_smtp_config()
+    cfg = email_service.get_smtp_config()
     to_email = cfg['from_email']
     subject = "BCWA SMTP Test Successful"
 
@@ -201,7 +168,7 @@ def send_admin_test_email():
     html = generate_smtp_test_html_email(to_email, server_time, env_mode, supabase_status, smtp_status, render_id)
 
     try:
-        ok, msg = send_smtp_email(to_email, subject, html)
+        ok, msg = email_service.send_html_email(to_email, subject, html)
         if ok:
             logging.info(f"[SMTP TEST SUCCESS] Test email sent to {to_email}. Response: {msg}")
             return {'success': True, 'email': to_email, 'response': msg}
@@ -214,191 +181,395 @@ def send_admin_test_email():
         logging.error(f"[SMTP TEST EXCEPTION] Exception sending test email: {err_msg}\n{traceback.format_exc()}")
         return {'success': False, 'email': to_email, 'error': err_msg}
 
-def match_reminder_stage(days):
-    for stage in REMINDER_STAGES:
-        if days == stage or (stage == 0 and days <= 0):
-            return stage
-    return None
-
-def is_duplicate_reminder(store_id, doc_type, stage):
+def is_duplicate_queue_item(store_id, doc_type, days_remaining):
+    """Check both notification_queue and notification_logs for duplicate stage queueing."""
     try:
-        res = db_table('notification_logs').select('*') \
-            .eq('store_id', store_id) \
-            .eq('document_type', doc_type) \
-            .eq('days_remaining', stage) \
-            .execute()
-        return len(res.data) > 0
+        q_res = db_table('notification_queue').select('*').eq('store_id', store_id).eq('document_type', doc_type).eq('days_remaining', days_remaining).execute()
+        if q_res.data:
+            return True
+
+        l_res = db_table('notification_logs').select('*').eq('store_id', store_id).eq('document_type', doc_type).eq('days_remaining', days_remaining).execute()
+        if l_res.data:
+            return True
     except Exception:
-        return False
+        pass
+    return False
 
-def record_notification_log(store_id, pharmacist_id, doc_id, recipient_email, recipient_name, doc_type, days_remaining, delivery_success, error_msg=""):
-    log_id = f"NLOG-{random.randint(100000, 999999)}"
-    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+def generate_email_subject(doc_name, days_remaining):
+    if days_remaining <= 0:
+        return f"BCWA Alert – {doc_name} has expired"
+    elif days_remaining == 1:
+        return f"BCWA Reminder – {doc_name} expires tomorrow"
+    else:
+        return f"BCWA Reminder – {doc_name} expires in {days_remaining} days"
 
-    record = {
-        'id': log_id,
-        'store_id': store_id,
-        'pharmacist_id': pharmacist_id,
-        'document_id': doc_id,
-        'recipient_email': recipient_email or 'unknown@bcwaportal.in',
-        'recipient_name': recipient_name or 'Store Owner',
-        'document_type': doc_type,
-        'days_remaining': days_remaining,
-        'status': 'Sent' if delivery_success else 'Failed',
-        'sent_at': now_str,
-        'delivery_status': 'Success' if delivery_success else 'Failed',
-        'error_message': error_msg if not delivery_success else None
-    }
-
-    try:
-        db_table('notification_logs').insert(record)
-    except Exception as e:
-        logging.error(f"Failed to record notification log: {e}")
-
-    return record
-
-def scan_and_send_expiring_reminders():
+def scan_and_queue_expiring_reminders():
     """
-    Main Automated Renewal Engine scanning job.
-    Scans all stores, pharmacists, and documents for matching expiry stages and dispatches emails.
+    Scan all medical stores, pharmacists, and document vault records.
+    Queue matching reminders into notification_queue (NEVER send directly during scan).
     """
-    logging.info("[RENEWAL ENGINE] Starting automated expiry scan...")
     today = datetime.now().date()
+    queued_count = 0
+    skipped_count = 0
 
     try:
         stores = db_table('medical_stores').select('*').execute().data or []
         pharmacists = db_table('pharmacists').select('*').execute().data or []
         documents = db_table('documents').select('*').execute().data or []
     except Exception as e:
-        logging.error(f"[RENEWAL ENGINE ERROR] Failed to fetch records from database: {e}")
-        return {'processed': 0, 'sent': 0, 'failed': 0}
+        logging.error(f"[RENEWAL ENGINE SCAN ERROR] Failed to fetch data: {str(e)}")
+        return {'queued': 0, 'skipped': 0, 'error': str(e)}
 
-    sent_count = 0
-    failed_count = 0
-    skipped_count = 0
-
-    # 1. SCAN MEDICAL STORES (Drug License & Food License)
+    # 1. Scan Store Documents (Drug License 20B/21B, Food License)
     for s in stores:
         store_id = s.get('id')
         store_name = s.get('store_name', 'Medical Store')
-        owner_name = s.get('owner_name', 'Owner')
-        owner_email = s.get('owner_email') or s.get('contact_email') or 'owner@bcwaportal.in'
+        owner_name = s.get('owner_name', 'Store Owner')
+        owner_email = s.get('owner_email') or s.get('email')
 
-        # Drug License Expiry
+        if not owner_email:
+            continue
+
+        # Drug License 20B/21B Expiry
         dl_expiry_str = s.get('dl_expiry_date')
         if dl_expiry_str:
             try:
-                dl_exp = datetime.strptime(dl_expiry_str, '%Y-%m-%d').date()
-                days = (dl_exp - today).days
-                stage = match_reminder_stage(days)
+                exp_date = datetime.strptime(dl_expiry_str, '%Y-%m-%d').date()
+                days_rem = (exp_date - today).days
+                stage = match_reminder_stage(days_rem)
                 if stage is not None:
-                    if not is_duplicate_reminder(store_id, 'Drug License', stage):
-                        subj = f"BCWA Renewal Reminder – Drug License expires in {days} days" if days > 0 else "BCWA Urgent Notice – Drug License EXPIRED"
-                        html = generate_reminder_html_email(owner_name, store_name, "Drug License (20B / 21B)", s.get('dl_20b_number', '20B-MH'), dl_expiry_str, days)
-                        ok, err = send_smtp_email(owner_email, subj, html)
-                        record_notification_log(store_id, None, f"DL-{store_id}", owner_email, owner_name, 'Drug License', stage, ok, err)
-                        if ok: sent_count += 1
-                        else: failed_count += 1
+                    if not is_duplicate_queue_item(store_id, 'Drug License', stage):
+                        doc_num = f"{s.get('dl_20b_number', '')} / {s.get('dl_21b_number', '')}"
+                        subject = generate_email_subject('Drug License', stage)
+                        html = generate_reminder_html_email(owner_name, store_name, 'Drug License', doc_num, dl_expiry_str, stage)
+                        
+                        queue_payload = {
+                            'id': f"Q-DL-{uuid.uuid4().hex[:8].upper()}",
+                            'store_id': store_id,
+                            'recipient_name': owner_name,
+                            'recipient_email': owner_email,
+                            'document_type': 'Drug License',
+                            'document_number': doc_num,
+                            'days_remaining': stage,
+                            'email_subject': subject,
+                            'email_body_html': html,
+                            'status': 'Pending',
+                            'retry_count': 0,
+                            'created_at': datetime.now().isoformat()
+                        }
+                        try:
+                            db_table('notification_queue').insert(queue_payload).execute()
+                            queued_count += 1
+                        except Exception as e:
+                            logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
                     else:
                         skipped_count += 1
-            except Exception as e:
-                logging.error(f"Error processing DL for store {store_id}: {e}")
+            except Exception:
+                pass
 
-        # Food License Expiry
+        # Food License (FSSAI) Expiry
         fssai_expiry_str = s.get('fssai_expiry_date')
         if fssai_expiry_str:
             try:
-                fssai_exp = datetime.strptime(fssai_expiry_str, '%Y-%m-%d').date()
-                days = (fssai_exp - today).days
-                stage = match_reminder_stage(days)
+                exp_date = datetime.strptime(fssai_expiry_str, '%Y-%m-%d').date()
+                days_rem = (exp_date - today).days
+                stage = match_reminder_stage(days_rem)
                 if stage is not None:
-                    if not is_duplicate_reminder(store_id, 'Food License', stage):
-                        subj = f"BCWA Renewal Reminder – FSSAI License expires in {days} days" if days > 0 else "BCWA Urgent Notice – FSSAI License EXPIRED"
-                        html = generate_reminder_html_email(owner_name, store_name, "FSSAI Food License", s.get('fssai_number', 'FSSAI-100'), fssai_expiry_str, days)
-                        ok, err = send_smtp_email(owner_email, subj, html)
-                        record_notification_log(store_id, None, f"FSSAI-{store_id}", owner_email, owner_name, 'Food License', stage, ok, err)
-                        if ok: sent_count += 1
-                        else: failed_count += 1
+                    if not is_duplicate_queue_item(store_id, 'Food License (FSSAI)', stage):
+                        doc_num = s.get('fssai_number', 'N/A')
+                        subject = generate_email_subject('Food License (FSSAI)', stage)
+                        html = generate_reminder_html_email(owner_name, store_name, 'Food License (FSSAI)', doc_num, fssai_expiry_str, stage)
+
+                        queue_payload = {
+                            'id': f"Q-FS-{uuid.uuid4().hex[:8].upper()}",
+                            'store_id': store_id,
+                            'recipient_name': owner_name,
+                            'recipient_email': owner_email,
+                            'document_type': 'Food License (FSSAI)',
+                            'document_number': doc_num,
+                            'days_remaining': stage,
+                            'email_subject': subject,
+                            'email_body_html': html,
+                            'status': 'Pending',
+                            'retry_count': 0,
+                            'created_at': datetime.now().isoformat()
+                        }
+                        try:
+                            db_table('notification_queue').insert(queue_payload).execute()
+                            queued_count += 1
+                        except Exception as e:
+                            logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
                     else:
                         skipped_count += 1
-            except Exception as e:
-                logging.error(f"Error processing FSSAI for store {store_id}: {e}")
+            except Exception:
+                pass
 
-    # 2. SCAN PHARMACISTS (PPP Card & MSPC Registration)
-    store_map = {s['id']: s for s in stores}
+    # 2. Scan Pharmacist Documents (PPP Card, MSPC Registration)
     for p in pharmacists:
         ph_id = p.get('id')
-        ph_name = p.get('full_name', 'Pharmacist')
-        ph_email = p.get('email') or 'pharmacist@bcwaportal.in'
         store_id = p.get('store_id')
-        st = store_map.get(store_id, {})
-        store_name = st.get('store_name', 'Assigned Medical Store')
+        ph_name = p.get('full_name', 'Pharmacist')
+        ph_email = p.get('email')
 
-        # PPP Expiry
-        ppp_expiry_str = p.get('ppp_expiry')
-        if ppp_expiry_str:
+        if not ph_email:
+            continue
+
+        store = next((st for st in stores if st.get('id') == store_id), {}) if store_id else {}
+        store_name = store.get('store_name', 'Associated Pharmacy')
+
+        ppp_exp_str = p.get('ppp_expiry')
+        if ppp_exp_str:
             try:
-                ppp_exp = datetime.strptime(ppp_expiry_str, '%Y-%m-%d').date()
-                days = (ppp_exp - today).days
-                stage = match_reminder_stage(days)
+                exp_date = datetime.strptime(ppp_exp_str, '%Y-%m-%d').date()
+                days_rem = (exp_date - today).days
+                stage = match_reminder_stage(days_rem)
                 if stage is not None:
-                    if not is_duplicate_reminder(store_id or ph_id, 'PPP Card', stage):
-                        subj = f"BCWA Renewal Reminder – PPP Card expires in {days} days" if days > 0 else "BCWA Urgent Notice – PPP Card EXPIRED"
-                        html = generate_reminder_html_email(ph_name, store_name, "Pharmacist Professional Renewal (PPP)", p.get('ppp_number', 'PPP-100'), ppp_expiry_str, days, pharmacist_name=ph_name)
-                        ok, err = send_smtp_email(ph_email, subj, html)
-                        record_notification_log(store_id, ph_id, f"PPP-{ph_id}", ph_email, ph_name, 'PPP Card', stage, ok, err)
-                        if ok: sent_count += 1
-                        else: failed_count += 1
+                    if not is_duplicate_queue_item(store_id or ph_id, 'PPP Card', stage):
+                        doc_num = p.get('ppp_number', 'N/A')
+                        subject = generate_email_subject('PPP Card', stage)
+                        html = generate_reminder_html_email(ph_name, store_name, 'PPP Card', doc_num, ppp_exp_str, stage, pharmacist_name=ph_name)
+
+                        queue_payload = {
+                            'id': f"Q-PPP-{uuid.uuid4().hex[:8].upper()}",
+                            'store_id': store_id,
+                            'pharmacist_id': ph_id,
+                            'recipient_name': ph_name,
+                            'recipient_email': ph_email,
+                            'document_type': 'PPP Card',
+                            'document_number': doc_num,
+                            'days_remaining': stage,
+                            'email_subject': subject,
+                            'email_body_html': html,
+                            'status': 'Pending',
+                            'retry_count': 0,
+                            'created_at': datetime.now().isoformat()
+                        }
+                        try:
+                            db_table('notification_queue').insert(queue_payload).execute()
+                            queued_count += 1
+                        except Exception as e:
+                            logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
                     else:
                         skipped_count += 1
-            except Exception as e:
-                logging.error(f"Error processing PPP for pharmacist {ph_id}: {e}")
+            except Exception:
+                pass
 
-    # 3. SCAN CUSTOM DOCUMENTS
+    # 3. Dynamic Scan of Vault Documents (Rent Agreement, Shop Act, Inspection, Fire NOC, GST, etc.)
     for d in documents:
-        doc_id = d.get('id')
-        cat = d.get('category', 'Other Document')
+        d_id = d.get('id')
+        store_id = d.get('store_id')
+        doc_category = d.get('category', 'Vault Document')
         expiry_str = d.get('expiry_date')
-        if expiry_str:
+        doc_num = d.get('document_number', 'N/A')
+
+        if not expiry_str:
+            continue
+
+        store = next((st for st in stores if st.get('id') == store_id), {}) if store_id else {}
+        owner_name = store.get('owner_name', 'Store Owner') if store else 'Member'
+        owner_email = store.get('owner_email') or store.get('email') if store else None
+
+        if not owner_email:
+            continue
+
+        try:
+            exp_date = datetime.strptime(expiry_str, '%Y-%m-%d').date()
+            days_rem = (exp_date - today).days
+            stage = match_reminder_stage(days_rem)
+            if stage is not None:
+                if not is_duplicate_queue_item(store_id or d_id, doc_category, stage):
+                    subject = generate_email_subject(doc_category, stage)
+                    html = generate_reminder_html_email(owner_name, store.get('store_name', 'Medical Store'), doc_category, doc_num, expiry_str, stage)
+
+                    queue_payload = {
+                        'id': f"Q-DOC-{uuid.uuid4().hex[:8].upper()}",
+                        'store_id': store_id,
+                        'document_id': d_id,
+                        'recipient_name': owner_name,
+                        'recipient_email': owner_email,
+                        'document_type': doc_category,
+                        'document_number': doc_num,
+                        'days_remaining': stage,
+                        'email_subject': subject,
+                        'email_body_html': html,
+                        'status': 'Pending',
+                        'retry_count': 0,
+                        'created_at': datetime.now().isoformat()
+                    }
+                    try:
+                        db_table('notification_queue').insert(queue_payload).execute()
+                        queued_count += 1
+                    except Exception as e:
+                        logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
+                else:
+                    skipped_count += 1
+        except Exception:
+            pass
+
+    try:
+        db_table('settings').upsert({'key': 'last_reminder_run', 'value': datetime.now().strftime('%Y-%m-%d %H:%M:%S IST')}).execute()
+    except Exception:
+        pass
+
+    return {'queued': queued_count, 'skipped': skipped_count}
+
+def process_notification_queue(limit=50):
+    """
+    Process pending & retry-eligible items in notification_queue.
+    Uses exponential backoff for retries: 5 min, 30 min, 2 hours. Max retries: 3.
+    """
+    now = datetime.now()
+    sent_count = 0
+    failed_count = 0
+
+    try:
+        res = db_table('notification_queue').select('*').in_('status', ['Pending', 'Failed']).limit(limit).execute()
+        items = res.data or []
+    except Exception as e:
+        logging.error(f"[QUEUE FETCH ERROR] {str(e)}")
+        return {'sent': 0, 'failed': 0, 'error': str(e)}
+
+    for item in items:
+        item_id = item.get('id')
+        retry_count = item.get('retry_count', 0)
+        max_retries = item.get('max_retries', 3)
+        next_retry = item.get('next_retry_at')
+
+        if next_retry:
             try:
-                exp_date = datetime.strptime(expiry_str, '%Y-%m-%d').date()
-                days = (exp_date - today).days
-                stage = match_reminder_stage(days)
-                if stage is not None:
-                    store_id = d.get('store_id')
-                    st = store_map.get(store_id, {})
-                    recip_name = st.get('owner_name', 'Store Owner')
-                    recip_email = st.get('owner_email') or st.get('contact_email') or 'owner@bcwaportal.in'
+                retry_time = datetime.fromisoformat(next_retry.replace('Z', '+00:00'))
+                if now < retry_time:
+                    continue
+            except Exception:
+                pass
 
-                    if not is_duplicate_reminder(store_id or doc_id, cat, stage):
-                        subj = f"BCWA Renewal Reminder – {cat} expires in {days} days" if days > 0 else f"BCWA Urgent Notice – {cat} EXPIRED"
-                        html = generate_reminder_html_email(recip_name, st.get('store_name', 'Medical Store'), cat, d.get('title', doc_id), expiry_str, days)
-                        ok, err = send_smtp_email(recip_email, subj, html)
-                        record_notification_log(store_id, None, doc_id, recip_email, recip_name, cat, stage, ok, err)
-                        if ok: sent_count += 1
-                        else: failed_count += 1
-                    else:
-                        skipped_count += 1
+        if retry_count >= max_retries:
+            # Mark permanently failed
+            db_table('notification_queue').update({'status': 'FAILED', 'error_message': 'Max retries exceeded'}).eq('id', item_id).execute()
+            continue
+
+        # Update status to Sending
+        db_table('notification_queue').update({'status': 'Sending'}).eq('id', item_id).execute()
+
+        # Dispatch via multi-channel notification_service
+        ok, response_msg = notification_service.send(item)
+        sent_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        if ok:
+            # Update queue status to Sent
+            db_table('notification_queue').update({
+                'status': 'Sent',
+                'sent_at': sent_timestamp,
+                'smtp_response': response_msg
+            }).eq('id', item_id).execute()
+
+            # Record in notification_logs history table
+            log_payload = {
+                'id': item_id.replace('Q-', 'N-'),
+                'store_id': item.get('store_id'),
+                'pharmacist_id': item.get('pharmacist_id'),
+                'document_id': item.get('document_id'),
+                'recipient_email': item.get('recipient_email'),
+                'recipient_name': item.get('recipient_name'),
+                'document_type': item.get('document_type'),
+                'document_number': item.get('document_number'),
+                'days_remaining': item.get('days_remaining'),
+                'email_subject': item.get('email_subject'),
+                'email_status': 'Sent',
+                'status': 'Sent',
+                'smtp_response': response_msg,
+                'retry_count': retry_count,
+                'sent_at': sent_timestamp,
+                'delivery_status': 'Success'
+            }
+            try:
+                db_table('notification_logs').insert(log_payload).execute()
             except Exception as e:
-                logging.error(f"Error processing document {doc_id}: {e}")
+                logging.error(f"[LOG INSERT ERROR] {str(e)}")
 
-    summary = {'sent': sent_count, 'failed': failed_count, 'skipped': skipped_count}
-    logging.info(f"[RENEWAL ENGINE SCAN COMPLETE] Summary: {summary}")
-    return summary
+            sent_count += 1
+        else:
+            new_retry_count = retry_count + 1
+            # Exponential backoff: 5 min, 30 min, 2 hours
+            backoff_minutes = 5 if new_retry_count == 1 else (30 if new_retry_count == 2 else 120)
+            next_retry_at = (now + timedelta(minutes=backoff_minutes)).isoformat()
+
+            new_status = 'FAILED' if new_retry_count >= max_retries else 'Failed'
+            db_table('notification_queue').update({
+                'status': new_status,
+                'retry_count': new_retry_count,
+                'next_retry_at': next_retry_at,
+                'error_message': response_msg,
+                'smtp_response': response_msg
+            }).eq('id', item_id).execute()
+
+            # Also log attempt in notification_logs
+            log_payload = {
+                'id': f"ERR-{item_id.replace('Q-', '')}-{new_retry_count}",
+                'store_id': item.get('store_id'),
+                'pharmacist_id': item.get('pharmacist_id'),
+                'document_id': item.get('document_id'),
+                'recipient_email': item.get('recipient_email'),
+                'recipient_name': item.get('recipient_name'),
+                'document_type': item.get('document_type'),
+                'document_number': item.get('document_number'),
+                'days_remaining': item.get('days_remaining'),
+                'email_subject': item.get('email_subject'),
+                'email_status': 'Failed',
+                'status': 'Failed',
+                'smtp_response': response_msg,
+                'retry_count': new_retry_count,
+                'sent_at': sent_timestamp,
+                'delivery_status': 'Failed',
+                'error_message': response_msg
+            }
+            try:
+                db_table('notification_logs').insert(log_payload).execute()
+            except Exception:
+                pass
+
+            failed_count += 1
+
+    return {'sent': sent_count, 'failed': failed_count}
+
+def run_reminder_engine():
+    """Manual or scheduled execution of full scan + queue processing."""
+    scan_res = scan_and_queue_expiring_reminders()
+    proc_res = process_notification_queue()
+    return {
+        'queued': scan_res.get('queued', 0),
+        'skipped': scan_res.get('skipped', 0),
+        'sent': proc_res.get('sent', 0),
+        'failed': proc_res.get('failed', 0)
+    }
+
+def retry_failed_queue_item(queue_id):
+    """Manually retry a failed queue item."""
+    try:
+        res = db_table('notification_queue').select('*').eq('id', queue_id).execute()
+        if not res.data:
+            return False, "Queue item not found"
+
+        item = res.data[0]
+        db_table('notification_queue').update({'status': 'Pending', 'retry_count': 0}).eq('id', queue_id).execute()
+        proc_res = process_notification_queue()
+        if proc_res.get('sent', 0) > 0:
+            return True, "Email resent successfully"
+        else:
+            return False, "Retry attempt failed. Check error logs."
+    except Exception as e:
+        return False, str(e)
 
 def start_background_notification_scheduler():
-    """
-    Launches a daemon background thread that runs scan_and_send_expiring_reminders every 24 hours.
-    """
-    def daemon_worker():
+    """Start 24-hour background scheduler thread running daily at 08:00 AM IST / periodic sweep."""
+    def worker():
         while True:
             try:
-                scan_and_send_expiring_reminders()
+                run_reminder_engine()
             except Exception as e:
-                logging.error(f"[SCHEDULER ERROR] Background scan error: {e}")
-            # Sleep 24 hours (86400 seconds)
-            time.sleep(86400)
+                logging.error(f"[SCHEDULER ERROR] {str(e)}")
+            time.sleep(3600)  # Sweep every hour
 
-    t = threading.Thread(target=daemon_worker, daemon=True)
-    t.start()
-    logging.info("[RENEWAL ENGINE] Background 24-hour scheduler thread started successfully.")
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    logging.info("[RENEWAL SCHEDULER] Automated Renewal Notification Engine daemon started.")

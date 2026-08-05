@@ -242,6 +242,24 @@
                                 <span class="kpi-sub">Delivery issues to retry</span>
                             </div>
                         </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-warning"><i data-lucide="clock"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Pending Emails</span>
+                                <span class="kpi-value text-warning" id="kpi-pending-emails">0</span>
+                                <span class="kpi-sub">Queued for dispatch</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-blue"><i data-lucide="calendar"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Last Reminder Run</span>
+                                <span class="kpi-value" style="font-size:14px;" id="kpi-last-reminder-run">Never</span>
+                                <span class="kpi-sub">Automated engine sweep</span>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="dashboard-grid">
@@ -484,6 +502,31 @@
                         </div>
                         <div class="card-body">
                             <div class="notifications-list" id="notifications-list"></div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h3>Email Dispatch Queue (notification_queue)</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table" id="table-notification-queue">
+                                    <thead>
+                                        <tr>
+                                            <th>Queue ID</th>
+                                            <th>Recipient</th>
+                                            <th>Document Type</th>
+                                            <th>Stage</th>
+                                            <th>Status</th>
+                                            <th>Retries</th>
+                                            <th>Next Retry At</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 

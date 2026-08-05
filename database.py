@@ -27,7 +27,7 @@ def init_db():
                 'created_at': now_str,
                 'updated_at': now_str
             }
-            db_table('users').upsert(admin_user)
+            db_table('users').upsert(admin_user).execute()
     except Exception as e:
         print(f"[INIT DB WARNING] User verification deferred: {e}")
 
@@ -157,15 +157,23 @@ def get_dashboard_stats():
 
     recent_stores = stores[:5] if len(stores) >= 5 else stores
 
-    # Fetch notification_logs stats
+    # Fetch notification_logs & notification_queue stats
     try:
         notif_logs = db_table('notification_logs').select('*').execute().data or []
+        notif_queue = db_table('notification_queue').select('*').execute().data or []
         today_date_str = today.strftime('%Y-%m-%d')
-        emails_sent_today = sum(1 for n in notif_logs if str(n.get('sent_at', '')).startswith(today_date_str) and n.get('delivery_status') == 'Success')
-        failed_emails = sum(1 for n in notif_logs if n.get('delivery_status') == 'Failed')
+        
+        emails_sent_today = sum(1 for n in notif_logs if str(n.get('sent_at', '')).startswith(today_date_str) and (n.get('delivery_status') == 'Success' or n.get('status') == 'Sent'))
+        pending_emails = sum(1 for q in notif_queue if q.get('status') in ['Pending', 'Sending'])
+        failed_emails = sum(1 for q in notif_queue if q.get('status') in ['Failed', 'FAILED']) + sum(1 for n in notif_logs if n.get('delivery_status') == 'Failed')
+        
+        settings_res = db_table('settings').select('*').eq('key', 'last_reminder_run').execute()
+        last_run = settings_res.data[0].get('value') if settings_res.data else 'Never'
     except Exception:
         emails_sent_today = 0
+        pending_emails = 0
         failed_emails = 0
+        last_run = 'Never'
 
     return {
         'total_stores': total_stores,
@@ -176,12 +184,30 @@ def get_dashboard_stats():
         'expired_documents': total_expired,
         'upcoming_renewals': upcoming_renewals,
         'emails_sent_today': emails_sent_today,
+        'pending_emails': pending_emails,
         'failed_emails': failed_emails,
+        'last_reminder_run': last_run,
         'compliance_score': avg_score,
         'todays_notifications': len(notifications),
         'recent_activity': activity,
         'recent_stores': recent_stores
     }
+
+def get_notification_queue(status=None, limit=100):
+    try:
+        query = db_table('notification_queue').select('*').order('created_at', desc=True)
+        if status:
+            query = query.eq('status', status)
+        return query.limit(limit).execute().data or []
+    except Exception:
+        return []
+
+def get_notification_queue_item_by_id(queue_id):
+    try:
+        res = db_table('notification_queue').select('*').eq('id', queue_id).execute()
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
 
 def get_notification_logs(limit=100):
     try:
@@ -337,7 +363,7 @@ def save_medical_store(data):
 
     if is_new:
         record['created_at'] = now_str
-        db_table('medical_stores').insert(record)
+        db_table('medical_stores').insert(record).execute()
         log_activity("Office Staff", "Store Registered", f"Registered new Medical Store: {data.get('store_name')} ({shop_code})", store_id)
     else:
         db_table('medical_stores').update(record).eq('id', store_id).execute()
@@ -429,7 +455,7 @@ def save_pharmacist(data):
 
     if is_new:
         record['created_at'] = now_str
-        db_table('pharmacists').insert(record)
+        db_table('pharmacists').insert(record).execute()
         log_activity("Office Staff", "Pharmacist Added", f"Added Pharmacist: {data.get('full_name')} ({data.get('mspc_number')})", data.get('store_id'))
     else:
         db_table('pharmacists').update(record).eq('id', ph_id).execute()
@@ -523,7 +549,7 @@ def save_document(data):
         'updated_at': now_str
     }
 
-    db_table('documents').upsert(record)
+    db_table('documents').upsert(record).execute()
     log_activity("Office Staff", "Document Uploaded", f"Uploaded {data.get('category')} for Store ID: {data.get('store_id')}", data.get('store_id'))
     return {'id': doc_id, 'quality_status': quality_status, 'quality_notes': quality_notes}
 
@@ -603,7 +629,7 @@ def log_activity(user_name, action, details, store_id=None):
         'details': details,
         'store_id': store_id,
         'created_at': now_str
-    })
+    }).execute()
 
 def get_users():
     return db_table('users').select('*').execute().data
@@ -621,5 +647,5 @@ def save_user(data):
         'last_login': now_str,
         'updated_at': now_str
     }
-    db_table('users').upsert(record)
+    db_table('users').upsert(record).execute()
     return user_id

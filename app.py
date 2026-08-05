@@ -13,16 +13,21 @@ from database import (
     transfer_pharmacist, delete_pharmacist, get_documents, save_document,
     delete_document, get_renewal_calendar_events, get_notifications,
     mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates,
-    log_activity, get_notification_logs, get_notification_log_by_id, resend_notification_log
+    log_activity, get_notification_logs, get_notification_log_by_id, resend_notification_log,
+    get_notification_queue, get_notification_queue_item_by_id
 )
 from seed_data import generate_seed_data
 from supabase_client import upload_to_supabase_storage, test_supabase_connection, db_table
 from notification_engine import (
-    scan_and_send_expiring_reminders,
+    run_reminder_engine,
+    scan_and_queue_expiring_reminders,
+    process_notification_queue,
+    retry_failed_queue_item,
     start_background_notification_scheduler,
     generate_reminder_html_email,
     send_admin_test_email
 )
+from email_service import verify_smtp
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config.from_object(get_config())
@@ -618,8 +623,35 @@ def generate_report():
 # -----------------------------------------------------------------------------
 @app.route('/api/notifications/engine/run', methods=['POST'])
 def api_run_notification_engine():
-    summary = scan_and_send_expiring_reminders()
+    summary = run_reminder_engine()
     return jsonify({'success': True, 'summary': summary})
+
+@app.route('/api/notifications/queue', methods=['GET'])
+def api_get_notification_queue():
+    status = request.args.get('status')
+    limit = int(request.args.get('limit', 100))
+    queue_items = get_notification_queue(status=status, limit=limit)
+    return jsonify({'queue': queue_items, 'total': len(queue_items)})
+
+@app.route('/api/notifications/queue/<queue_id>/retry', methods=['POST'])
+def api_retry_notification_queue_item(queue_id):
+    user = session.get('user')
+    if not user or user.get('role') != 'Administrator':
+        return jsonify({'success': False, 'error': 'Administrator access required'}), 403
+
+    ok, msg = retry_failed_queue_item(queue_id)
+    if ok:
+        return jsonify({'success': True, 'message': 'Notification retry completed successfully'})
+    return jsonify({'success': False, 'error': msg}), 500
+
+@app.route('/api/admin/verify-smtp', methods=['GET'])
+def api_admin_verify_smtp():
+    user = session.get('user')
+    if not user or user.get('role') != 'Administrator':
+        return jsonify({'success': False, 'error': 'Administrator access required'}), 403
+
+    ok, msg = verify_smtp()
+    return jsonify({'success': ok, 'message': msg})
 
 @app.route('/api/notifications/logs', methods=['GET'])
 def api_get_notification_logs():

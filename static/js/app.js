@@ -263,9 +263,14 @@ const BCWAApp = {
             document.getElementById('notif-badge-count').textContent = data.todays_notifications;
 
             const emailsSentEl = document.getElementById('kpi-emails-sent-today');
+            const pendingEmailsEl = document.getElementById('kpi-pending-emails');
             const failedEmailsEl = document.getElementById('kpi-failed-emails');
+            const lastRunEl = document.getElementById('kpi-last-reminder-run');
+
             if (emailsSentEl) emailsSentEl.textContent = data.emails_sent_today || 0;
+            if (pendingEmailsEl) pendingEmailsEl.textContent = data.pending_emails || 0;
             if (failedEmailsEl) failedEmailsEl.textContent = data.failed_emails || 0;
+            if (lastRunEl) lastRunEl.textContent = data.last_reminder_run || 'Never';
 
             const feed = document.getElementById('dashboard-activity-feed');
             if (feed && data.recent_activity) {
@@ -491,6 +496,32 @@ const BCWAApp = {
                 `).join('');
             }
 
+            // Fetch Notification Queue Items
+            const qRes = await fetch('/api/notifications/queue');
+            const qData = await qRes.json();
+            const qTbody = document.querySelector('#table-notification-queue tbody');
+
+            if (qTbody && qData.queue) {
+                if (qData.queue.length === 0) {
+                    qTbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted p-3">Queue is empty. All reminder emails processed.</td></tr>';
+                } else {
+                    qTbody.innerHTML = qData.queue.map(q => `
+                        <tr>
+                            <td><code>${q.id}</code></td>
+                            <td><strong>${q.recipient_name}</strong><br><small class="text-muted">${q.recipient_email}</small></td>
+                            <td><span class="badge badge-info">${q.document_type}</span></td>
+                            <td><strong>${q.days_remaining} Days</strong></td>
+                            <td><span class="badge ${q.status === 'Sent' ? 'badge-success' : (q.status === 'Pending' ? 'badge-warning' : 'badge-danger')}">${q.status}</span></td>
+                            <td>${q.retry_count} / ${q.max_retries}</td>
+                            <td><small class="text-muted">${q.next_retry_at ? q.next_retry_at.split('T')[0] : 'Immediate'}</small></td>
+                            <td>
+                                <button class="btn btn-secondary btn-sm" onclick="BCWAApp.retryQueueItem('${q.id}')" title="Retry Queue Item"><i data-lucide="rotate-cw"></i> Retry</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            }
+
             // Fetch Automated Email Notification Dispatch Logs
             const logRes = await fetch('/api/notifications/logs');
             const logData = await logRes.json();
@@ -517,6 +548,22 @@ const BCWAApp = {
             lucide.createIcons();
         } catch (err) {
             console.error('Error loading notifications:', err);
+        }
+    },
+
+    async retryQueueItem(queueId) {
+        try {
+            const res = await fetch(`/api/notifications/queue/${queueId}/retry`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                alert('Queue item retried successfully!');
+                this.loadNotifications();
+                this.loadDashboardData();
+            } else {
+                alert(`Retry failed: ${data.error}`);
+            }
+        } catch (e) {
+            alert('Error connecting to server.');
         }
     },
 

@@ -61,7 +61,7 @@ def generate_seed_data():
         'created_at': now_str,
         'updated_at': now_str
     }
-    db_table('users').insert(admin_user)
+    db_table('users').insert(admin_user).execute()
 
     stores_list = []
     pharmacists_list = []
@@ -198,11 +198,11 @@ def generate_seed_data():
                 'created_at': now_str
             })
 
-    db_table('medical_stores').insert(stores_list)
-    db_table('pharmacists').insert(pharmacists_list)
-    db_table('documents').insert(documents_list)
+    db_table('medical_stores').insert(stores_list).execute()
+    db_table('pharmacists').insert(pharmacists_list).execute()
+    db_table('documents').insert(documents_list).execute()
     if notifications:
-        db_table('notifications').insert(notifications)
+        db_table('notifications').insert(notifications).execute()
 
     activity_logs.append({
         'id': f"ACT-{random.randint(10000, 99999)}",
@@ -212,7 +212,7 @@ def generate_seed_data():
         'store_id': None,
         'created_at': now_str
     })
-    db_table('activity_logs').insert(activity_logs)
+    db_table('activity_logs').insert(activity_logs).execute()
 
     print(f"Generating exact 20 Medical Stores synthetic dataset for BCWA Portal...")
     print(f"Seed generation complete: Exactly {len(stores_list)} Medical Stores, {len(pharmacists_list)} Pharmacists, {len(documents_list)} Documents created successfully.")
