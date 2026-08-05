@@ -139,6 +139,18 @@ class BCWAPortalTestCase(unittest.TestCase):
         app_module.SERVER_STARTUP_ID = old_id
         print("Deployment Invalidation Test Passed.")
 
+    def test_renewal_notification_engine(self):
+        from notification_engine import scan_and_send_expiring_reminders
+        summary = scan_and_send_expiring_reminders()
+        self.assertIn('sent', summary)
+        self.assertIn('skipped', summary)
+
+        res_logs = self.app.get('/api/notifications/logs')
+        self.assertEqual(res_logs.status_code, 200)
+        logs_data = res_logs.get_json()
+        self.assertIn('logs', logs_data)
+        print("Automated Renewal Notification Engine Test Passed.")
+
 if __name__ == '__main__':
     unittest.main()
 

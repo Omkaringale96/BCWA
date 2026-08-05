@@ -13,10 +13,15 @@ from database import (
     transfer_pharmacist, delete_pharmacist, get_documents, save_document,
     delete_document, get_renewal_calendar_events, get_notifications,
     mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates,
-    log_activity
+    log_activity, get_notification_logs, get_notification_log_by_id, resend_notification_log
 )
 from seed_data import generate_seed_data
 from supabase_client import upload_to_supabase_storage, test_supabase_connection, db_table
+from notification_engine import (
+    scan_and_send_expiring_reminders,
+    start_background_notification_scheduler,
+    generate_reminder_html_email
+)
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config.from_object(get_config())
@@ -27,6 +32,7 @@ SERVER_STARTUP_ID = uuid.uuid4().hex
 
 init_db()
 generate_seed_data()
+start_background_notification_scheduler()
 
 # Lockout tracker for failed login attempts (5 attempts -> 5 minute lockout)
 failed_attempts_tracker = {}
@@ -602,6 +608,95 @@ def generate_report():
 
         return Response(buffer.getvalue(), mimetype='application/pdf', headers={
             'Content-Disposition': f'inline; filename=BCWA_{report_type.replace(" ", "_")}.pdf'
+        })
+    except Exception as e:
+        return jsonify({'error': f"Failed to generate PDF: {str(e)}"}), 500
+
+# -----------------------------------------------------------------------------
+# AUTOMATED RENEWAL NOTIFICATION ENGINE API & MANUAL ACTIONS
+# -----------------------------------------------------------------------------
+@app.route('/api/notifications/engine/run', methods=['POST'])
+def api_run_notification_engine():
+    summary = scan_and_send_expiring_reminders()
+    return jsonify({'success': True, 'summary': summary})
+
+@app.route('/api/notifications/logs', methods=['GET'])
+def api_get_notification_logs():
+    limit = int(request.args.get('limit', 100))
+    logs = get_notification_logs(limit=limit)
+    return jsonify({'logs': logs, 'total': len(logs)})
+
+@app.route('/api/notifications/logs/<log_id>/resend', methods=['POST'])
+def api_resend_notification_log(log_id):
+    ok, msg = resend_notification_log(log_id)
+    if ok:
+        return jsonify({'success': True, 'message': 'Notification email resent successfully'})
+    return jsonify({'success': False, 'error': msg}), 500
+
+@app.route('/api/notifications/logs/<log_id>/preview', methods=['GET'])
+def api_preview_notification_log(log_id):
+    log = get_notification_log_by_id(log_id)
+    if not log:
+        return "Notification log entry not found", 404
+    
+    store_id = log.get('store_id')
+    store = get_medical_store(store_id) if store_id else {}
+    store_name = store.get('store_name', 'Medical Store') if store else 'Medical Store'
+
+    html = generate_reminder_html_email(
+        recipient_name=log.get('recipient_name', 'Valued Member'),
+        store_name=store_name,
+        doc_name=log.get('document_type', 'Document'),
+        doc_num=f"REF-{log_id}",
+        expiry_date_str="As Specified",
+        days_remaining=log.get('days_remaining', 0)
+    )
+    return Response(html, mimetype='text/html')
+
+@app.route('/api/notifications/logs/<log_id>/pdf', methods=['GET'])
+def api_pdf_notification_log(log_id):
+    log = get_notification_log_by_id(log_id)
+    if not log:
+        return jsonify({'error': 'Notification log entry not found'}), 404
+
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+        styles = getSampleStyleSheet()
+        elements = []
+
+        elements.append(Paragraph("<b>BOISAR WELFARE CHEMIST ASSOCIATION (BCWA)</b>", styles['Title']))
+        elements.append(Paragraph("<font color='#6B7280'>Official Renewal Reminder Certificate & Notification Notice</font>", styles['Normal']))
+        elements.append(Spacer(1, 15))
+
+        table_data = [
+            ["Notice Reference ID", str(log.get('id'))],
+            ["Recipient Name", str(log.get('recipient_name'))],
+            ["Recipient Email", str(log.get('recipient_email'))],
+            ["Document Category", str(log.get('document_type'))],
+            ["Days Remaining Stage", f"{log.get('days_remaining')} Days"],
+            ["Delivery Status", str(log.get('delivery_status'))],
+            ["Dispatched Timestamp", str(log.get('sent_at'))],
+        ]
+
+        t = Table(table_data, colWidths=[200, 320])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#F3F4F6')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#D1D5DB')),
+            ('PADDING', (0,0), (-1,-1), 8),
+            ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ]))
+        elements.append(t)
+
+        doc.build(elements)
+        buffer.seek(0)
+        return Response(buffer.getvalue(), mimetype='application/pdf', headers={
+            'Content-Disposition': f'inline; filename=BCWA_Notice_{log_id}.pdf'
         })
     except Exception as e:
         return jsonify({'error': f"Failed to generate PDF: {str(e)}"}), 500

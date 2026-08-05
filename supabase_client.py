@@ -41,7 +41,8 @@ _mock_storage = {
     'renewals': [],
     'notifications': [],
     'activity_logs': [],
-    'settings': []
+    'settings': [],
+    'notification_logs': []
 }
 
 def get_supabase_credentials():

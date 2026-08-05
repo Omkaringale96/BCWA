@@ -157,6 +157,16 @@ def get_dashboard_stats():
 
     recent_stores = stores[:5] if len(stores) >= 5 else stores
 
+    # Fetch notification_logs stats
+    try:
+        notif_logs = db_table('notification_logs').select('*').execute().data or []
+        today_date_str = today.strftime('%Y-%m-%d')
+        emails_sent_today = sum(1 for n in notif_logs if str(n.get('sent_at', '')).startswith(today_date_str) and n.get('delivery_status') == 'Success')
+        failed_emails = sum(1 for n in notif_logs if n.get('delivery_status') == 'Failed')
+    except Exception:
+        emails_sent_today = 0
+        failed_emails = 0
+
     return {
         'total_stores': total_stores,
         'total_pharmacists': total_pharmacists,
@@ -165,11 +175,61 @@ def get_dashboard_stats():
         'ppp_expiring': ppp_expiring,
         'expired_documents': total_expired,
         'upcoming_renewals': upcoming_renewals,
+        'emails_sent_today': emails_sent_today,
+        'failed_emails': failed_emails,
         'compliance_score': avg_score,
         'todays_notifications': len(notifications),
         'recent_activity': activity,
         'recent_stores': recent_stores
     }
+
+def get_notification_logs(limit=100):
+    try:
+        return db_table('notification_logs').select('*').order('sent_at', desc=True).limit(limit).execute().data or []
+    except Exception:
+        return []
+
+def get_notification_log_by_id(log_id):
+    try:
+        res = db_table('notification_logs').select('*').eq('id', log_id).execute()
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
+
+def resend_notification_log(log_id):
+    log = get_notification_log_by_id(log_id)
+    if not log:
+        return False, "Notification log entry not found"
+
+    from notification_engine import send_smtp_email, generate_reminder_html_email
+    
+    recip_email = log.get('recipient_email')
+    recip_name = log.get('recipient_name', 'Valued Member')
+    doc_type = log.get('document_type', 'Document')
+    days_rem = log.get('days_remaining', 0)
+    store_id = log.get('store_id')
+
+    store = get_medical_store(store_id) if store_id else {}
+    store_name = store.get('store_name', 'Medical Store') if store else 'Medical Store'
+
+    subject = f"BCWA Resent Renewal Reminder – {doc_type}"
+    html = generate_reminder_html_email(recip_name, store_name, doc_type, f"REF-{log_id}", "As Specified", days_rem)
+
+    ok, err_msg = send_smtp_email(recip_email, subject, html)
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    update_payload = {
+        'sent_at': now_str,
+        'status': 'Sent' if ok else 'Failed',
+        'delivery_status': 'Success' if ok else 'Failed',
+        'error_message': err_msg if not ok else None
+    }
+    try:
+        db_table('notification_logs').update(update_payload).eq('id', log_id).execute()
+    except Exception:
+        pass
+
+    return ok, err_msg
 
 def get_medical_stores(query=None, compliance=None, status=None, limit=100, offset=0):
     stores = db_table('medical_stores').select('*').order('created_at', desc=True).limit(limit).execute().data

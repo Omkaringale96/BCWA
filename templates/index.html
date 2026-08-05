@@ -224,6 +224,24 @@
                                 <span class="kpi-sub">Total action items</span>
                             </div>
                         </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-success"><i data-lucide="mail"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Emails Sent Today</span>
+                                <span class="kpi-value text-success" id="kpi-emails-sent-today">0</span>
+                                <span class="kpi-sub">Automated renewal notices</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-danger"><i data-lucide="alert-circle"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Failed Emails</span>
+                                <span class="kpi-value text-danger" id="kpi-failed-emails">0</span>
+                                <span class="kpi-sub">Delivery issues to retry</span>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="dashboard-grid">
@@ -451,13 +469,46 @@
                 <section class="tab-pane" id="pane-notifications">
                     <div class="pane-header">
                         <div>
-                            <h2>Automated Notifications &amp; Reminders</h2>
-                            <p class="text-secondary">System alerts for 90, 60, 30, 15, 7, 1 day, and expired document reminders.</p>
+                            <h2>Automated Notifications &amp; Email Renewal Engine</h2>
+                            <p class="text-secondary">Automated email reminders dispatched at 90, 60, 30, 15, 10, 7, 3, 1 day, and expired stages.</p>
+                        </div>
+                        <button class="btn btn-primary" id="btn-run-notification-engine" onclick="BCWAApp.runNotificationEngineScan()">
+                            <i data-lucide="mail-check"></i>
+                            <span>Run Engine Scan Now</span>
+                        </button>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h3>Active System Alerts</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="notifications-list" id="notifications-list"></div>
                         </div>
                     </div>
 
                     <div class="card">
-                        <div class="notifications-list" id="notifications-list"></div>
+                        <div class="card-header">
+                            <h3>Automated Email Dispatch History (notification_logs)</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table" id="table-notification-logs">
+                                    <thead>
+                                        <tr>
+                                            <th>Log ID</th>
+                                            <th>Recipient</th>
+                                            <th>Document Type</th>
+                                            <th>Stage</th>
+                                            <th>Status</th>
+                                            <th>Dispatched At</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </section>
 

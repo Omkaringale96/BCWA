@@ -262,6 +262,11 @@ const BCWAApp = {
             document.getElementById('kpi-upcoming-renewals').textContent = data.upcoming_renewals;
             document.getElementById('notif-badge-count').textContent = data.todays_notifications;
 
+            const emailsSentEl = document.getElementById('kpi-emails-sent-today');
+            const failedEmailsEl = document.getElementById('kpi-failed-emails');
+            if (emailsSentEl) emailsSentEl.textContent = data.emails_sent_today || 0;
+            if (failedEmailsEl) failedEmailsEl.textContent = data.failed_emails || 0;
+
             const feed = document.getElementById('dashboard-activity-feed');
             if (feed && data.recent_activity) {
                 feed.innerHTML = data.recent_activity.map(act => `
@@ -473,20 +478,76 @@ const BCWAApp = {
             const data = await res.json();
             const container = document.getElementById('notifications-list');
 
-            if (!container) return;
-
-            container.innerHTML = data.notifications.map(n => `
-                <div class="notif-item card mb-2 p-3" style="border-left: 4px solid ${n.type === 'Danger' ? '#EF4444' : '#F59E0B'}; display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <strong>${n.title}</strong>
-                        <p class="text-secondary" style="font-size:12px; margin-top:2px;">${n.message}</p>
-                        <small class="text-muted">${n.created_at}</small>
+            if (container && data.notifications) {
+                container.innerHTML = data.notifications.map(n => `
+                    <div class="notif-item card mb-2 p-3" style="border-left: 4px solid ${n.type === 'Danger' ? '#EF4444' : '#F59E0B'}; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <strong>${n.title}</strong>
+                            <p class="text-secondary" style="font-size:12px; margin-top:2px;">${n.message}</p>
+                            <small class="text-muted">${n.created_at}</small>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="BCWAApp.markRead('${n.id}')">Dismiss</button>
                     </div>
-                    <button class="btn btn-secondary btn-sm" onclick="BCWAApp.markRead('${n.id}')">Dismiss</button>
-                </div>
-            `).join('');
+                `).join('');
+            }
+
+            // Fetch Automated Email Notification Dispatch Logs
+            const logRes = await fetch('/api/notifications/logs');
+            const logData = await logRes.json();
+            const logTbody = document.querySelector('#table-notification-logs tbody');
+
+            if (logTbody && logData.logs) {
+                logTbody.innerHTML = logData.logs.map(l => `
+                    <tr>
+                        <td><code>${l.id}</code></td>
+                        <td><strong>${l.recipient_name}</strong><br><small class="text-muted">${l.recipient_email}</small></td>
+                        <td><span class="badge badge-info">${l.document_type}</span></td>
+                        <td><strong>${l.days_remaining} Days</strong></td>
+                        <td><span class="badge ${l.delivery_status === 'Success' ? 'badge-success' : 'badge-danger'}">${l.delivery_status}</span></td>
+                        <td><small class="text-muted">${l.sent_at}</small></td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm me-1" onclick="BCWAApp.resendEmailNotice('${l.id}')" title="Resend Email"><i data-lucide="send"></i> Resend</button>
+                            <button class="btn btn-secondary btn-sm me-1" onclick="window.open('/api/notifications/logs/${l.id}/preview', '_blank')" title="Preview Email HTML"><i data-lucide="eye"></i> Preview</button>
+                            <button class="btn btn-secondary btn-sm" onclick="window.open('/api/notifications/logs/${l.id}/pdf', '_blank')" title="Download PDF Notice"><i data-lucide="download"></i> PDF</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            lucide.createIcons();
         } catch (err) {
             console.error('Error loading notifications:', err);
+        }
+    },
+
+    async runNotificationEngineScan() {
+        const btn = document.getElementById('btn-run-notification-engine');
+        if (btn) btn.disabled = true;
+        try {
+            const res = await fetch('/api/notifications/engine/run', { method: 'POST' });
+            const data = await res.json();
+            alert(`Renewal Engine Scan Complete:\n• ${data.summary.sent} Email(s) Dispatched\n• ${data.summary.skipped} Skipped (Duplicates Prevention)\n• ${data.summary.failed} Failed`);
+            this.loadNotifications();
+            this.loadDashboardData();
+        } catch (e) {
+            alert('Failed to trigger Notification Engine scan.');
+        }
+        if (btn) btn.disabled = false;
+    },
+
+    async resendEmailNotice(logId) {
+        try {
+            const res = await fetch(`/api/notifications/logs/${logId}/resend`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                alert('Notification email resent successfully!');
+                this.loadNotifications();
+                this.loadDashboardData();
+            } else {
+                alert(`Resend failed: ${data.error}`);
+            }
+        } catch (e) {
+            alert('Error connecting to server.');
         }
     },
 

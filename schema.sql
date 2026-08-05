@@ -150,6 +150,22 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 9. NOTIFICATION LOGS TABLE (Automated Renewal Engine History)
+CREATE TABLE IF NOT EXISTS notification_logs (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES medical_stores(id) ON DELETE CASCADE,
+    pharmacist_id TEXT REFERENCES pharmacists(id) ON DELETE SET NULL,
+    document_id TEXT,
+    recipient_email TEXT NOT NULL,
+    recipient_name TEXT NOT NULL,
+    document_type TEXT NOT NULL,
+    days_remaining INTEGER NOT NULL,
+    status TEXT DEFAULT 'Sent',
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    delivery_status TEXT DEFAULT 'Success',
+    error_message TEXT
+);
+
 -- INDEXES FOR OPTIMIZED QUERY PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_stores_shop_code ON medical_stores(shop_code);
 CREATE INDEX IF NOT EXISTS idx_stores_dl_expiry ON medical_stores(dl_expiry_date);
@@ -161,6 +177,8 @@ CREATE INDEX IF NOT EXISTS idx_documents_store_id ON documents(store_id);
 CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category);
 CREATE INDEX IF NOT EXISTS idx_notifications_store_id ON notifications(store_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notif_logs_store ON notification_logs(store_id);
+CREATE INDEX IF NOT EXISTS idx_notif_logs_dup ON notification_logs(store_id, document_type, days_remaining);
 
 -- ============================================================================
 -- GRANT TABLE PERMISSIONS & DISABLE RLS FOR BACKEND ACCESS
@@ -178,3 +196,4 @@ ALTER TABLE renewals DISABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_logs DISABLE ROW LEVEL SECURITY;
