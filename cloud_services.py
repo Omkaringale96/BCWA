@@ -2,89 +2,21 @@ import os
 import json
 import logging
 
-# -----------------------------------------------------------------------------
-# CLOUDINARY FILE & DOCUMENT UPLOADER
-# -----------------------------------------------------------------------------
-try:
-    import cloudinary
-    import cloudinary.uploader
-    HAS_CLOUDINARY = True
-except ImportError:
-    HAS_CLOUDINARY = False
-
-CLOUDINARY_FOLDER = os.environ.get('CLOUDINARY_FOLDER', 'BCWA_Portal_Documents')
-
-def init_cloudinary():
-    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME')
-    api_key = os.environ.get('CLOUDINARY_API_KEY')
-    api_secret = os.environ.get('CLOUDINARY_API_SECRET')
-
-    if HAS_CLOUDINARY and cloud_name and api_key and api_secret:
-        cloudinary.config(
-            cloud_name=cloud_name,
-            api_key=api_key,
-            api_secret=api_secret,
-            secure=True
-        )
-        return True
-    return False
-
-def upload_document_to_cloudinary(file_obj, filename, folder_category="General"):
-    """
-    Uploads a document (PDF, image, PNG, JPG) to Cloudinary into the single BCWA folder.
-    Returns: dict with 'url', 'public_id', 'format', 'bytes'
-    """
-    if not init_cloudinary():
-        # Fallback local URL representation if Cloudinary credentials are not set
-        target_folder = f"{CLOUDINARY_FOLDER}/{folder_category}"
-        return {
-            'success': True,
-            'url': f"https://res.cloudinary.com/bcwa-portal/image/upload/v1722880000/{target_folder}/{filename}",
-            'public_id': f"{target_folder}/{filename}",
-            'format': filename.split('.')[-1] if '.' in filename else 'pdf',
-            'folder': target_folder,
-            'is_mock': True
-        }
-
-    try:
-        full_folder = f"{CLOUDINARY_FOLDER}/{folder_category}"
-        response = cloudinary.uploader.upload(
-            file_obj,
-            folder=full_folder,
-            use_filename=True,
-            unique_filename=True,
-            resource_type="auto"
-        )
-        return {
-            'success': True,
-            'url': response.get('secure_url'),
-            'public_id': response.get('public_id'),
-            'format': response.get('format'),
-            'bytes': response.get('bytes'),
-            'folder': full_folder,
-            'is_mock': False
-        }
-    except Exception as e:
-        logging.error(f"Cloudinary upload failed: {e}")
-        return {
-            'success': False,
-            'error': str(e)
-        }
-
-# -----------------------------------------------------------------------------
-# FIREBASE FIRESTORE DATABASE SYNCHRONIZER
-# -----------------------------------------------------------------------------
 try:
     import firebase_admin
-    from firebase_admin import credentials, firestore
+    from firebase_admin import credentials, firestore, storage
     HAS_FIREBASE = True
 except ImportError:
     HAS_FIREBASE = False
 
+FIREBASE_BUCKET_NAME = os.environ.get('FIREBASE_STORAGE_BUCKET', 'bcwa-portal.appspot.com')
+STORAGE_FOLDER = os.environ.get('FIREBASE_STORAGE_FOLDER', 'BCWA_Portal_Documents')
+
 db_firestore = None
+bucket_storage = None
 
 def init_firebase():
-    global db_firestore
+    global db_firestore, bucket_storage
     if not HAS_FIREBASE:
         return None
 
@@ -96,30 +28,74 @@ def init_firebase():
 
     try:
         if not firebase_admin._apps:
+            options = {'storageBucket': FIREBASE_BUCKET_NAME}
             if cred_json:
                 cred_dict = json.loads(cred_json)
                 cred = credentials.Certificate(cred_dict)
-                firebase_admin.initialize_app(cred)
+                firebase_admin.initialize_app(cred, options)
             elif os.path.exists(cred_file):
                 cred = credentials.Certificate(cred_file)
-                firebase_admin.initialize_app(cred)
+                firebase_admin.initialize_app(cred, options)
             else:
-                # Default application credentials fallback
                 try:
                     cred = credentials.ApplicationDefault()
-                    firebase_admin.initialize_app(cred)
+                    firebase_admin.initialize_app(cred, options)
                 except Exception:
                     return None
 
         db_firestore = firestore.client()
+        try:
+            bucket_storage = storage.bucket()
+        except Exception:
+            bucket_storage = None
+
         return db_firestore
     except Exception as e:
         logging.error(f"Firebase initialization info: {e}")
         return None
 
+def upload_document_to_firebase_storage(file_obj, filename, folder_category="General"):
+    """
+    Uploads PDFs, scanned documents, photos, signatures directly to Firebase Storage.
+    Folder structure: BCWA_Portal_Documents/<category>/<filename>
+    """
+    db = init_firebase()
+    target_path = f"{STORAGE_FOLDER}/{folder_category}/{filename}"
+
+    if bucket_storage:
+        try:
+            blob = bucket_storage.blob(target_path)
+            if hasattr(file_obj, 'read'):
+                blob.upload_from_file(file_obj)
+            else:
+                blob.upload_from_string(file_obj)
+            
+            try:
+                blob.make_public()
+                public_url = blob.public_url
+            except Exception:
+                public_url = f"https://firebasestorage.googleapis.com/v0/b/{FIREBASE_BUCKET_NAME}/o/{target_path.replace('/', '%2F')}?alt=media"
+
+            return {
+                'success': True,
+                'url': public_url,
+                'path': target_path,
+                'is_mock': False
+            }
+        except Exception as e:
+            logging.error(f"Firebase Storage upload failed: {e}")
+
+    # Fallback Firebase Storage URL structure if offline/mock
+    return {
+        'success': True,
+        'url': f"https://firebasestorage.googleapis.com/v0/b/{FIREBASE_BUCKET_NAME}/o/{target_path.replace('/', '%2F')}?alt=media",
+        'path': target_path,
+        'is_mock': True
+    }
+
 def sync_to_firestore(collection_name, doc_id, data):
     """
-    Syncs a record to Firebase Firestore.
+    Syncs store, pharmacist, document, renewal, and user metadata to Firebase Firestore.
     """
     db = init_firebase()
     if not db:

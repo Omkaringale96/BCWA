@@ -15,9 +15,9 @@ from database import (
 )
 from seed_data import generate_seed_data
 try:
-    from cloud_services import upload_document_to_cloudinary, sync_to_firestore
+    from cloud_services import upload_document_to_firebase_storage, sync_to_firestore
 except ImportError:
-    upload_document_to_cloudinary = None
+    upload_document_to_firebase_storage = None
     sync_to_firestore = None
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -259,13 +259,13 @@ def api_upload_document():
     file_url = f"/static/docs/{file_name}"
     size_kb = random.randint(150, 800)
 
-    if file and upload_document_to_cloudinary:
+    if file and upload_document_to_firebase_storage:
         file_bytes = file.read()
         size_kb = max(1, int(len(file_bytes) / 1024))
         file.seek(0)
-        c_res = upload_document_to_cloudinary(file, file_name, folder_category=category)
-        if c_res.get('success'):
-            file_url = c_res.get('url')
+        fb_res = upload_document_to_firebase_storage(file, file_name, folder_category=category)
+        if fb_res.get('success'):
+            file_url = fb_res.get('url')
 
     doc_data = {
         'store_id': store_id,

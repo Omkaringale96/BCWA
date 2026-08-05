@@ -6,10 +6,10 @@ from datetime import datetime, timedelta
 import random
 
 try:
-    from cloud_services import sync_to_firestore, upload_document_to_cloudinary
+    from cloud_services import sync_to_firestore, upload_document_to_firebase_storage
 except ImportError:
     sync_to_firestore = None
-    upload_document_to_cloudinary = None
+    upload_document_to_firebase_storage = None
 
 DB_FILE = os.path.join(os.path.dirname(__file__), 'bcwa_portal.db')
 
