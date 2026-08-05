@@ -775,8 +775,13 @@ def index():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5005))
     debug_mode = app.config.get('DEBUG', True)
     env_name = app.config.get('ENV', 'development')
     print(f"🚀 Launching BCWA Portal [{env_name.upper()} MODE] on http://127.0.0.1:{port} (Debug: {debug_mode})")
-    app.run(host='0.0.0.0', port=port, debug=debug_mode)
+    try:
+        app.run(host='0.0.0.0', port=port, debug=debug_mode)
+    except OSError:
+        port = 5005
+        print(f"🚀 Port occupied. Fallback launching on http://127.0.0.1:{port}...")
+        app.run(host='0.0.0.0', port=port, debug=debug_mode)
