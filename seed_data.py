@@ -62,12 +62,13 @@ def generate_seed_data():
     now = datetime.now()
     now_str = now.strftime('%Y-%m-%d %H:%M:%S')
 
-    users = [
-        ("USR-1001", "BCWA Admin", "admin@bcwaportal.in", "BCWA@2026", "Administrator", "Active", now_str),
-        ("USR-1002", "Office Staff", "staff@bcwaportal.in", "BCWA@2026", "Office Staff", "Active", now_str),
-        ("USR-1003", "Inspector ReadOnly", "auditor@bcwaportal.in", "BCWA@2026", "Read Only", "Active", now_str)
-    ]
-    cursor.executemany("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?)", users)
+    # Seed ONLY Administrator Account (Vinayak VIN2821)
+    cursor.execute("SELECT id FROM users WHERE id = 'VIN2821'")
+    if not cursor.fetchone():
+        users = [
+            ("VIN2821", "Vinayak", "vin2821@bcwaportal.in", "2821", "Administrator", "Active", now_str)
+        ]
+        cursor.executemany("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?)", users)
 
     stores_list = []
     pharmacists_list = []
