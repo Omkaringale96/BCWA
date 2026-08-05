@@ -27,7 +27,7 @@ def init_db():
                 'created_at': now_str,
                 'updated_at': now_str
             }
-            db_table('users').insert(admin_user)
+            db_table('users').upsert(admin_user)
     except Exception as e:
         print(f"[INIT DB WARNING] User verification deferred: {e}")
 
@@ -356,9 +356,8 @@ def save_pharmacist(data):
         'ppp_number': data.get('ppp_number'),
         'ppp_expiry': data.get('ppp_expiry'),
         'reg_expiry': data.get('reg_expiry', data.get('ppp_expiry')),
-        'qualification': data.get('qualification', 'B.Pharm'),
-        'joining_date': data.get('joining_date'),
-        'leaving_date': data.get('leaving_date', ''),
+        'joining_date': data.get('joining_date') or None,
+        'leaving_date': data.get('leaving_date') or None,
         'mobile': data.get('mobile'),
         'email': data.get('email', ''),
         'status': data.get('status', 'Active'),

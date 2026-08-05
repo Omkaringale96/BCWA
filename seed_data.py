@@ -153,7 +153,7 @@ def generate_seed_data():
                 'reg_expiry': ppp_expiry,
                 'qualification': QUALIFICATIONS[random.randint(0, len(QUALIFICATIONS)-1)],
                 'joining_date': (now - timedelta(days=random.randint(100, 800))).strftime('%Y-%m-%d'),
-                'leaving_date': "",
+                'leaving_date': None,
                 'mobile': f"9765{random.randint(100000, 999999)}",
                 'email': f"{ph_name.lower().replace(' ', '')}@gmail.com",
                 'status': "Active",
