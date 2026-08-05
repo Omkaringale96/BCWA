@@ -512,7 +512,7 @@ const BCWAApp = {
                             <td><span class="badge badge-info">${q.document_type}</span></td>
                             <td><strong>${q.days_remaining} Days</strong></td>
                             <td><span class="badge ${q.status === 'Sent' ? 'badge-success' : (q.status === 'Pending' ? 'badge-warning' : 'badge-danger')}">${q.status}</span></td>
-                            <td>${q.retry_count} / ${q.max_retries}</td>
+                            <td>${q.retry_count || 0} / ${q.max_retries || 3}</td>
                             <td><small class="text-muted">${q.next_retry_at ? q.next_retry_at.split('T')[0] : 'Immediate'}</small></td>
                             <td>
                                 <button class="btn btn-secondary btn-sm" onclick="BCWAApp.retryQueueItem('${q.id}')" title="Retry Queue Item"><i data-lucide="rotate-cw"></i> Retry</button>
@@ -524,6 +524,7 @@ const BCWAApp = {
 
             // Fetch Automated Email Notification Dispatch Logs
             const logRes = await fetch('/api/notifications/logs');
+            if (logRes.status === 401) return;
             const logData = await logRes.json();
             const logTbody = document.querySelector('#table-notification-logs tbody');
 
@@ -554,6 +555,11 @@ const BCWAApp = {
     async retryQueueItem(queueId) {
         try {
             const res = await fetch(`/api/notifications/queue/${queueId}/retry`, { method: 'POST' });
+            if (res.status === 401) {
+                alert('Session expired due to inactivity or server restart. Please sign in again.');
+                this.showLoginModal();
+                return;
+            }
             const data = await res.json();
             if (data.success) {
                 alert('Queue item retried successfully!');
@@ -572,8 +578,14 @@ const BCWAApp = {
         if (btn) btn.disabled = true;
         try {
             const res = await fetch('/api/notifications/engine/run', { method: 'POST' });
+            if (res.status === 401) {
+                alert('Session expired due to inactivity or server restart. Please sign in again.');
+                this.showLoginModal();
+                if (btn) btn.disabled = false;
+                return;
+            }
             const data = await res.json();
-            alert(`Renewal Engine Scan Complete:\n• ${data.summary.sent} Email(s) Dispatched\n• ${data.summary.skipped} Skipped (Duplicates Prevention)\n• ${data.summary.failed} Failed`);
+            alert(`Renewal Engine Scan Complete:\n• ${data.summary.queued || 0} Email(s) Queued\n• ${data.summary.sent || 0} Email(s) Dispatched\n• ${data.summary.skipped || 0} Skipped (Duplicates Prevention)\n• ${data.summary.failed || 0} Failed`);
             this.loadNotifications();
             this.loadDashboardData();
         } catch (e) {
@@ -585,6 +597,11 @@ const BCWAApp = {
     async resendEmailNotice(logId) {
         try {
             const res = await fetch(`/api/notifications/logs/${logId}/resend`, { method: 'POST' });
+            if (res.status === 401) {
+                alert('Session expired due to inactivity or server restart. Please sign in again.');
+                this.showLoginModal();
+                return;
+            }
             const data = await res.json();
             if (data.success) {
                 alert('Notification email resent successfully!');
