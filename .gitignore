@@ -1,5 +1,8 @@
 __pycache__/
 *.pyc
 .env
+.env.development
+.env.production
 .DS_Store
 *.log
+.venv/

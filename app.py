@@ -6,6 +6,7 @@ import re
 import json
 import random
 from datetime import datetime, timedelta
+from config import get_config
 from database import (
     init_db, get_dashboard_stats, get_medical_stores, get_medical_store,
     save_medical_store, delete_medical_store, get_pharmacists, save_pharmacist,
@@ -18,16 +19,8 @@ from seed_data import generate_seed_data
 from supabase_client import upload_to_supabase_storage, test_supabase_connection, db_table
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
+app.config.from_object(get_config())
 CORS(app, supports_credentials=True)
-
-# -----------------------------------------------------------------------------
-# SESSION SECURITY & CONFIGURATION
-# -----------------------------------------------------------------------------
-app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'bcwa_portal_enterprise_security_key_2026')
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production HTTPS
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
 
 init_db()
 generate_seed_data()
@@ -580,11 +573,23 @@ def generate_report():
     except Exception as e:
         return jsonify({'error': f"Failed to generate PDF: {str(e)}"}), 500
 
+@app.errorhandler(500)
+def handle_500_error(e):
+    if app.config.get('DEBUG'):
+        return jsonify({
+            'error': 'Internal Server Error',
+            'details': str(e),
+            'environment': app.config.get('ENV')
+        }), 500
+    return jsonify({'error': 'An internal server error occurred.'}), 500
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5005))
-    print(f"Starting BCWA Portal Server on http://0.0.0.0:{port} ...")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    debug_mode = app.config.get('DEBUG', True)
+    env_name = app.config.get('ENV', 'development')
+    print(f"🚀 Launching BCWA Portal [{env_name.upper()} MODE] on http://127.0.0.1:{port} (Debug: {debug_mode})")
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
