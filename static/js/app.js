@@ -1,0 +1,687 @@
+document.addEventListener('DOMContentLoaded', () => {
+    BCWAApp.init();
+});
+
+const BCWAApp = {
+    currentTab: 'dashboard',
+    storesCache: [],
+    pharmacistsCache: [],
+
+    init() {
+        this.bindNavigation();
+        this.bindGlobalSearch();
+        this.bindModals();
+        this.bindFormSubmissions();
+        this.bindOCRScanner();
+        this.loadDashboardData();
+    },
+
+    bindNavigation() {
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const tab = item.dataset.tab;
+                this.switchTab(tab);
+            });
+        });
+
+        document.getElementById('btn-nav-stores')?.addEventListener('click', () => {
+            this.switchTab('medical-stores');
+        });
+    },
+
+    switchTab(tabId) {
+        this.currentTab = tabId;
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+
+        const targetNav = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
+        const targetPane = document.getElementById(`pane-${tabId}`);
+
+        if (targetNav) targetNav.classList.add('active');
+        if (targetPane) targetPane.classList.add('active');
+
+        switch (tabId) {
+            case 'dashboard':
+                this.loadDashboardData();
+                break;
+            case 'medical-stores':
+                this.loadMedicalStores();
+                break;
+            case 'pharmacists':
+                this.loadPharmacists();
+                break;
+            case 'document-vault':
+                this.loadDocumentVault();
+                break;
+            case 'renewal-calendar':
+                this.loadRenewalCalendar();
+                break;
+            case 'notifications':
+                this.loadNotifications();
+                break;
+            case 'activity-logs':
+                this.loadActivityLogs();
+                break;
+            case 'admin':
+                this.loadAdminUsers();
+                break;
+        }
+
+        lucide.createIcons();
+    },
+
+    bindGlobalSearch() {
+        const input = document.getElementById('global-search-input');
+        if (!input) return;
+
+        let debounceTimer;
+        input.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const query = e.target.value.trim();
+                if (this.currentTab === 'medical-stores') {
+                    this.loadMedicalStores(query);
+                } else if (this.currentTab === 'pharmacists') {
+                    this.loadPharmacists(query);
+                } else {
+                    this.switchTab('medical-stores');
+                    this.loadMedicalStores(query);
+                }
+            }, 300);
+        });
+    },
+
+    async loadDashboardData() {
+        try {
+            const res = await fetch('/api/dashboard/stats');
+            const data = await res.json();
+
+            document.getElementById('kpi-total-stores').textContent = data.total_stores;
+            document.getElementById('kpi-total-pharmacists').textContent = data.total_pharmacists;
+            document.getElementById('kpi-dl-expiring').textContent = data.dl_expiring;
+            document.getElementById('kpi-fssai-expiring').textContent = data.fssai_expiring;
+            document.getElementById('kpi-ppp-expiring').textContent = data.ppp_expiring;
+            document.getElementById('kpi-expired-docs').textContent = data.expired_documents;
+            document.getElementById('kpi-compliance-score').textContent = `${data.compliance_score}%`;
+            document.getElementById('kpi-upcoming-renewals').textContent = data.upcoming_renewals;
+            document.getElementById('notif-badge-count').textContent = data.todays_notifications;
+
+            const feed = document.getElementById('dashboard-activity-feed');
+            if (feed && data.recent_activity) {
+                feed.innerHTML = data.recent_activity.map(act => `
+                    <div class="activity-item" style="display:flex; gap:10px; margin-bottom:12px; font-size:12px;">
+                        <i data-lucide="check-circle" style="width:16px; color:#2563EB;"></i>
+                        <div>
+                            <strong>${act.action}</strong> - ${act.details}
+                            <div class="text-secondary" style="font-size:11px;">${act.user_name} &bull; ${act.created_at}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            const storesBody = document.querySelector('#table-recent-stores tbody');
+            if (storesBody && data.recent_stores) {
+                storesBody.innerHTML = data.recent_stores.map(st => `
+                    <tr>
+                        <td><strong>${st.store_name}</strong></td>
+                        <td><code>${st.shop_code}</code></td>
+                        <td>${st.owner_name}</td>
+                        <td><span class="badge ${st.compliance_score >= 90 ? 'badge-success' : 'badge-warning'}">${st.compliance_score}% - ${st.compliance_status}</span></td>
+                        <td><span class="badge badge-info">Active</span></td>
+                        <td><button class="btn btn-secondary btn-sm" onclick="BCWAApp.openStoreProfile('${st.id}')">View</button></td>
+                    </tr>
+                `).join('');
+            }
+
+            lucide.createIcons();
+        } catch (err) {
+            console.error('Error loading dashboard stats:', err);
+        }
+    },
+
+    async loadMedicalStores(query = '') {
+        try {
+            const comp = document.getElementById('filter-store-compliance')?.value || '';
+            const status = document.getElementById('filter-store-status')?.value || '';
+
+            const res = await fetch(`/api/stores?query=${encodeURIComponent(query)}&compliance=${comp}&status=${status}`);
+            const data = await res.json();
+            this.storesCache = data.stores;
+
+            const tbody = document.querySelector('#table-medical-stores tbody');
+            if (!tbody) return;
+
+            if (data.stores.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-secondary py-4">No matching Medical Stores found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = data.stores.map(st => {
+                const badgeClass = st.compliance_score >= 90 ? 'badge-success' : (st.compliance_score >= 75 ? 'badge-info' : (st.compliance_score >= 50 ? 'badge-warning' : 'badge-danger'));
+                return `
+                    <tr>
+                        <td>
+                            <div><strong>${st.store_name}</strong></div>
+                            <small class="text-secondary">Code: <code>${st.shop_code}</code></small>
+                        </td>
+                        <td>
+                            <div>${st.owner_name}</div>
+                            <small class="text-secondary">${st.owner_mobile}</small>
+                        </td>
+                        <td>
+                            <div>20B: ${st.dl_20b_number}</div>
+                            <small class="text-secondary">Exp: ${st.dl_expiry_date}</small>
+                        </td>
+                        <td>
+                            <div>FSSAI: ${st.fssai_number}</div>
+                            <small class="text-secondary">Exp: ${st.fssai_expiry_date}</small>
+                        </td>
+                        <td>
+                            <span class="badge badge-info">${st.pharmacist_count} Pharmacists</span>
+                        </td>
+                        <td>
+                            <span class="badge ${badgeClass}">${st.compliance_score}% &bull; ${st.compliance_status}</span>
+                        </td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm" onclick="BCWAApp.openStoreProfile('${st.id}')">Profile</button>
+                            <button class="btn btn-secondary btn-sm" onclick="BCWAApp.editStore('${st.id}')">Edit</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        } catch (err) {
+            console.error('Error loading medical stores:', err);
+        }
+    },
+
+    async loadPharmacists(query = '') {
+        try {
+            const res = await fetch(`/api/pharmacists?query=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            this.pharmacistsCache = data.pharmacists;
+
+            const tbody = document.querySelector('#table-pharmacists tbody');
+            if (!tbody) return;
+
+            if (data.pharmacists.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-secondary py-4">No registered Pharmacists found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = data.pharmacists.map(ph => `
+                <tr>
+                    <td>
+                        <strong>${ph.full_name}</strong>
+                        <div class="text-secondary" style="font-size:11px;">Status: ${ph.status}</div>
+                    </td>
+                    <td><code>${ph.mspc_number}</code></td>
+                    <td>
+                        <div><code>${ph.ppp_number}</code></div>
+                        <small class="text-secondary">Exp: ${ph.ppp_expiry}</small>
+                    </td>
+                    <td>${ph.store_name ? `<strong>${ph.store_name}</strong>` : '<span class="text-muted">Unassigned</span>'}</td>
+                    <td><span class="badge badge-info">${ph.qualification}</span></td>
+                    <td>${ph.mobile}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="BCWAApp.openTransferModal('${ph.id}', '${ph.full_name}')">Transfer</button>
+                        <button class="btn btn-danger btn-sm" onclick="BCWAApp.deletePharmacist('${ph.id}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            lucide.createIcons();
+        } catch (err) {
+            console.error('Error loading pharmacists:', err);
+        }
+    },
+
+    async loadDocumentVault(category = 'All') {
+        try {
+            const catParam = category === 'All' ? '' : category;
+            const res = await fetch(`/api/documents?category=${encodeURIComponent(catParam)}`);
+            const data = await res.json();
+
+            document.getElementById('vault-current-category').textContent = category === 'All' ? 'All Document Categories' : category;
+            document.getElementById('vault-doc-count').textContent = `${data.documents.length} files`;
+
+            const tbody = document.querySelector('#table-documents tbody');
+            if (!tbody) return;
+
+            if (data.documents.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-secondary py-4">No documents found in folder.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = data.documents.map(doc => `
+                <tr>
+                    <td>
+                        <strong>${doc.title}</strong>
+                        <div class="text-secondary" style="font-size:11px;">${doc.file_name} &bull; ${doc.file_size_kb} KB</div>
+                    </td>
+                    <td>${doc.store_name || 'System Doc'}</td>
+                    <td><span class="badge badge-info">${doc.category}</span></td>
+                    <td>
+                        <span class="badge ${doc.quality_status === 'Passed' ? 'badge-success' : 'badge-warning'}">
+                            ${doc.quality_status}
+                        </span>
+                        <div class="text-secondary" style="font-size:10px;">${doc.quality_notes}</div>
+                    </td>
+                    <td>${doc.expiry_date || 'N/A'}</td>
+                    <td>
+                        <a href="${doc.file_url}" target="_blank" class="btn btn-secondary btn-sm">Preview</a>
+                    </td>
+                </tr>
+            `).join('');
+
+            lucide.createIcons();
+        } catch (err) {
+            console.error('Error loading document vault:', err);
+        }
+    },
+
+    async loadRenewalCalendar() {
+        try {
+            const res = await fetch('/api/calendar/events');
+            const data = await res.json();
+
+            const grid = document.getElementById('calendar-grid');
+            if (!grid) return;
+
+            grid.innerHTML = '';
+            for (let day = 1; day <= 31; day++) {
+                const dayStr = `2026-08-${day < 10 ? '0' + day : day}`;
+                const dayEvents = data.events.filter(e => e.date === dayStr);
+
+                const cell = document.createElement('div');
+                cell.className = 'calendar-cell';
+                cell.innerHTML = `
+                    <div class="calendar-cell-date">${day} Aug</div>
+                    ${dayEvents.map(ev => `
+                        <div class="calendar-event event-${ev.status.toLowerCase()}" onclick="BCWAApp.openStoreProfile('${ev.store_id}')">
+                            ${ev.type}: ${ev.store_name}
+                        </div>
+                    `).join('')}
+                `;
+                grid.appendChild(cell);
+            }
+        } catch (err) {
+            console.error('Error loading calendar:', err);
+        }
+    },
+
+    async loadNotifications() {
+        try {
+            const res = await fetch('/api/notifications');
+            const data = await res.json();
+            const container = document.getElementById('notifications-list');
+
+            if (!container) return;
+
+            container.innerHTML = data.notifications.map(n => `
+                <div class="notif-item card mb-2 p-3" style="border-left: 4px solid ${n.type === 'Danger' ? '#EF4444' : '#F59E0B'}; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong>${n.title}</strong>
+                        <p class="text-secondary" style="font-size:12px; margin-top:2px;">${n.message}</p>
+                        <small class="text-muted">${n.created_at}</small>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="BCWAApp.markRead('${n.id}')">Dismiss</button>
+                </div>
+            `).join('');
+        } catch (err) {
+            console.error('Error loading notifications:', err);
+        }
+    },
+
+    async markRead(id) {
+        await fetch(`/api/notifications/${id}/read`, { method: 'PUT' });
+        this.loadNotifications();
+    },
+
+    async loadActivityLogs() {
+        try {
+            const res = await fetch('/api/activity-logs');
+            const data = await res.json();
+            const tbody = document.querySelector('#table-activity-logs tbody');
+
+            if (!tbody) return;
+
+            tbody.innerHTML = data.logs.map(log => `
+                <tr>
+                    <td><code>${log.created_at}</code></td>
+                    <td><strong>${log.user_name}</strong></td>
+                    <td><span class="badge badge-info">${log.action}</span></td>
+                    <td>${log.details}</td>
+                </tr>
+            `).join('');
+        } catch (err) {
+            console.error('Error loading activity logs:', err);
+        }
+    },
+
+    async loadAdminUsers() {
+        try {
+            const res = await fetch('/api/admin/users');
+            const data = await res.json();
+            const tbody = document.querySelector('#table-admin-users tbody');
+
+            if (!tbody) return;
+
+            tbody.innerHTML = data.users.map(u => `
+                <tr>
+                    <td><strong>${u.name}</strong></td>
+                    <td>${u.email}</td>
+                    <td><span class="badge badge-info">${u.role}</span></td>
+                    <td><span class="badge badge-success">${u.status}</span></td>
+                    <td>${u.last_login}</td>
+                    <td><button class="btn btn-secondary btn-sm">Edit Role</button></td>
+                </tr>
+            `).join('');
+        } catch (err) {
+            console.error('Error loading admin users:', err);
+        }
+    },
+
+    async openStoreProfile(storeId) {
+        try {
+            const res = await fetch(`/api/stores/${storeId}`);
+            if (!res.ok) return;
+
+            const st = await res.json();
+            const body = document.getElementById('store-profile-body');
+
+            const badgeClass = st.compliance_score >= 90 ? 'badge-success' : (st.compliance_score >= 75 ? 'badge-info' : (st.compliance_score >= 50 ? 'badge-warning' : 'badge-danger'));
+
+            body.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <div>
+                        <h2 style="font-size:20px;">${st.store_name}</h2>
+                        <p class="text-secondary">Shop Code: <code>${st.shop_code}</code> &bull; ID: ${st.id}</p>
+                    </div>
+                    <span class="badge ${badgeClass}" style="font-size:14px; padding:6px 12px;">${st.compliance_score}% &bull; ${st.compliance_status}</span>
+                </div>
+
+                <div style="display:flex; gap:16px; background:#F8FAFC; padding:16px; border-radius:8px; margin-bottom:20px; border:1px solid #E5E7EB;">
+                    <div>
+                        <small class="text-secondary" style="display:block; margin-bottom:4px;">Profile QR Code</small>
+                        <img src="/api/qrcode/${st.id}" alt="QR" width="120" height="120">
+                    </div>
+                    <div style="flex:1;">
+                        <small class="text-secondary" style="display:block; margin-bottom:4px;">Physical File Barcode</small>
+                        <img src="/api/barcode/${st.id}" alt="Barcode" width="220" height="70">
+                    </div>
+                </div>
+
+                <div class="card mb-3 p-3">
+                    <h4 style="color:#2563EB; font-size:14px; margin-bottom:10px;">Owner Details</h4>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:13px;">
+                        <div><strong>Owner Name:</strong> ${st.owner_name}</div>
+                        <div><strong>Mobile:</strong> ${st.owner_mobile}</div>
+                        <div><strong>Email:</strong> ${st.owner_email || 'N/A'}</div>
+                        <div><strong>PAN:</strong> <code>${st.owner_pan || 'N/A'}</code></div>
+                        <div style="grid-column:span 2;"><strong>Address:</strong> ${st.address_line1}, ${st.area}, Palghar - ${st.pincode}</div>
+                    </div>
+                </div>
+
+                <div class="card mb-3 p-3">
+                    <h4 style="color:#2563EB; font-size:14px; margin-bottom:10px;">Drug &amp; Food Licenses</h4>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:13px;">
+                        <div><strong>20B Number:</strong> <code>${st.dl_20b_number}</code></div>
+                        <div><strong>21B Number:</strong> <code>${st.dl_21b_number}</code></div>
+                        <div><strong>DL Expiry:</strong> ${st.dl_expiry_date}</div>
+                        <div><strong>FSSAI Number:</strong> <code>${st.fssai_number}</code></div>
+                        <div><strong>FSSAI Expiry:</strong> ${st.fssai_expiry_date}</div>
+                    </div>
+                </div>
+
+                <div class="card mb-3 p-3">
+                    <h4 style="color:#2563EB; font-size:14px; margin-bottom:10px;">Assigned Pharmacists (${st.pharmacists ? st.pharmacists.length : 0})</h4>
+                    ${st.pharmacists && st.pharmacists.length > 0 ? `
+                        <ul style="list-style:none; padding:0;">
+                            ${st.pharmacists.map(p => `
+                                <li style="padding:6px 0; border-bottom:1px solid #E5E7EB; display:flex; justify-content:space-between;">
+                                    <span><strong>${p.full_name}</strong> (MSPC: ${p.mspc_number})</span>
+                                    <span class="badge badge-info">PPP Exp: ${p.ppp_expiry}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    ` : '<p class="text-secondary">No active pharmacists assigned.</p>'}
+                </div>
+
+                <div style="display:flex; gap:12px; margin-top:20px;">
+                    <button class="btn btn-primary" onclick="BCWAApp.generateProfilePDF('${st.id}')">Download Profile PDF</button>
+                    <button class="btn btn-danger" onclick="BCWAApp.deleteStore('${st.id}')">Delete Store</button>
+                </div>
+            `;
+
+            document.getElementById('drawer-store-profile').classList.add('active');
+            lucide.createIcons();
+        } catch (err) {
+            console.error('Error loading store profile:', err);
+        }
+    },
+
+    bindOCRScanner() {
+        const btnScan = document.getElementById('btn-ocr-scan');
+        const dropzone = document.getElementById('ocr-dropzone');
+        const fileInput = document.getElementById('ocr-file-input');
+
+        btnScan?.addEventListener('click', () => {
+            openModal('modal-ocr');
+        });
+
+        dropzone?.addEventListener('click', () => fileInput.click());
+
+        fileInput?.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('doc_type', 'Drug License');
+
+            try {
+                const res = await fetch('/api/ocr/extract', { method: 'POST', body: formData });
+                const json = await res.json();
+
+                if (json.success) {
+                    const ext = json.data;
+                    const output = document.getElementById('ocr-fields-output');
+                    output.innerHTML = `
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:13px; text-align:left; background:#F8FAFC; padding:12px; border-radius:6px;">
+                            <div><strong>Extracted Store:</strong> ${ext.store_name || 'N/A'}</div>
+                            <div><strong>Owner:</strong> ${ext.owner_name || 'N/A'}</div>
+                            <div><strong>20B License:</strong> ${ext.dl_20b_number || 'N/A'}</div>
+                            <div><strong>21B License:</strong> ${ext.dl_21b_number || 'N/A'}</div>
+                            <div><strong>Expiry Date:</strong> ${ext.expiry_date || 'N/A'}</div>
+                        </div>
+                    `;
+                    document.getElementById('ocr-result-box').classList.remove('hidden');
+                    document.getElementById('btn-apply-ocr').classList.remove('hidden');
+
+                    document.getElementById('btn-apply-ocr').onclick = () => {
+                        closeModal('modal-ocr');
+                        this.openAddStoreModal(ext);
+                    };
+                }
+            } catch (err) {
+                console.error('OCR Error:', err);
+            }
+        });
+    },
+
+    bindModals() {
+        document.getElementById('btn-add-store')?.addEventListener('click', () => this.openAddStoreModal());
+        document.getElementById('btn-add-store-tab')?.addEventListener('click', () => this.openAddStoreModal());
+        document.getElementById('btn-add-pharmacist')?.addEventListener('click', () => this.openAddPharmacistModal());
+        document.getElementById('btn-generate-report')?.addEventListener('click', () => openModal('modal-report'));
+        document.getElementById('btn-download-pdf-report')?.addEventListener('click', () => this.downloadPDFReport());
+
+        document.querySelectorAll('#vault-folder-list li').forEach(li => {
+            li.addEventListener('click', () => {
+                document.querySelectorAll('#vault-folder-list li').forEach(el => el.classList.remove('active'));
+                li.classList.add('active');
+                this.loadDocumentVault(li.dataset.category);
+            });
+        });
+    },
+
+    openAddStoreModal(ocrData = null) {
+        document.getElementById('form-store').reset();
+        document.getElementById('store-form-id').value = '';
+        document.getElementById('modal-store-title').textContent = 'Register Medical Store';
+
+        if (ocrData) {
+            if (ocrData.store_name) document.getElementById('store-form-name').value = ocrData.store_name;
+            if (ocrData.owner_name) document.getElementById('store-form-owner-name').value = ocrData.owner_name;
+            if (ocrData.dl_20b_number) document.getElementById('store-form-dl-20b').value = ocrData.dl_20b_number;
+            if (ocrData.dl_21b_number) document.getElementById('store-form-dl-21b').value = ocrData.dl_21b_number;
+            if (ocrData.expiry_date) document.getElementById('store-form-dl-expiry').value = ocrData.expiry_date;
+            if (ocrData.fssai_number) document.getElementById('store-form-fssai').value = ocrData.fssai_number;
+        }
+
+        openModal('modal-store');
+    },
+
+    async editStore(id) {
+        const res = await fetch(`/api/stores/${id}`);
+        const st = await res.json();
+
+        document.getElementById('store-form-id').value = st.id;
+        document.getElementById('store-form-name').value = st.store_name;
+        document.getElementById('store-form-owner-name').value = st.owner_name;
+        document.getElementById('store-form-owner-mobile').value = st.owner_mobile;
+        document.getElementById('store-form-dl-20b').value = st.dl_20b_number;
+        document.getElementById('store-form-dl-21b').value = st.dl_21b_number;
+        document.getElementById('store-form-dl-issue').value = st.dl_issue_date;
+        document.getElementById('store-form-dl-expiry').value = st.dl_expiry_date;
+        document.getElementById('store-form-fssai').value = st.fssai_number;
+        document.getElementById('store-form-fssai-expiry').value = st.fssai_expiry_date;
+        document.getElementById('store-form-address').value = st.address_line1;
+
+        document.getElementById('modal-store-title').textContent = 'Edit Medical Store';
+        openModal('modal-store');
+    },
+
+    async deleteStore(id) {
+        if (!confirm('Are you sure you want to delete this Medical Store record?')) return;
+        await fetch(`/api/stores/${id}`, { method: 'DELETE' });
+        closeDrawer('drawer-store-profile');
+        this.loadMedicalStores();
+    },
+
+    openAddPharmacistModal() {
+        document.getElementById('form-pharmacist').reset();
+        document.getElementById('ph-form-id').value = '';
+
+        const select = document.getElementById('ph-form-store-id');
+        select.innerHTML = '<option value="">-- Select Store --</option>' +
+            this.storesCache.map(s => `<option value="${s.id}">${s.store_name} (${s.shop_code})</option>`).join('');
+
+        openModal('modal-pharmacist');
+    },
+
+    openTransferModal(phId, phName) {
+        document.getElementById('transfer-ph-id').value = phId;
+        document.getElementById('transfer-ph-name').textContent = phName;
+
+        const select = document.getElementById('transfer-new-store-id');
+        select.innerHTML = this.storesCache.map(s => `<option value="${s.id}">${s.store_name} (${s.shop_code})</option>`).join('');
+
+        openModal('modal-transfer-pharmacist');
+
+        document.getElementById('btn-confirm-transfer').onclick = async () => {
+            const newStoreId = select.value;
+            const joiningDate = document.getElementById('transfer-joining-date').value || new Date().toISOString().split('T')[0];
+
+            await fetch(`/api/pharmacists/${phId}/transfer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ new_store_id: newStoreId, joining_date: joiningDate })
+            });
+
+            closeModal('modal-transfer-pharmacist');
+            this.loadPharmacists();
+        };
+    },
+
+    async deletePharmacist(id) {
+        if (!confirm('Delete this pharmacist record?')) return;
+        await fetch(`/api/pharmacists/${id}`, { method: 'DELETE' });
+        this.loadPharmacists();
+    },
+
+    bindFormSubmissions() {
+        document.getElementById('form-store')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('store-form-id').value;
+
+            const payload = {
+                store_name: document.getElementById('store-form-name').value,
+                owner_name: document.getElementById('store-form-owner-name').value,
+                owner_mobile: document.getElementById('store-form-owner-mobile').value,
+                dl_20b_number: document.getElementById('store-form-dl-20b').value,
+                dl_21b_number: document.getElementById('store-form-dl-21b').value,
+                dl_issue_date: document.getElementById('store-form-dl-issue').value,
+                dl_expiry_date: document.getElementById('store-form-dl-expiry').value,
+                fssai_number: document.getElementById('store-form-fssai').value,
+                fssai_expiry_date: document.getElementById('store-form-fssai-expiry').value,
+                fssai_issue_date: document.getElementById('store-form-dl-issue').value,
+                address_line1: document.getElementById('store-form-address').value,
+                area: document.getElementById('store-form-area').value
+            };
+
+            const url = id ? `/api/stores/${id}` : '/api/stores';
+            const method = id ? 'PUT' : 'POST';
+
+            await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            closeModal('modal-store');
+            this.loadMedicalStores();
+        });
+
+        document.getElementById('form-pharmacist')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                full_name: document.getElementById('ph-form-name').value,
+                mspc_number: document.getElementById('ph-form-mspc').value,
+                ppp_number: document.getElementById('ph-form-ppp').value,
+                ppp_expiry: document.getElementById('ph-form-ppp-expiry').value,
+                reg_expiry: document.getElementById('ph-form-ppp-expiry').value,
+                store_id: document.getElementById('ph-form-store-id').value,
+                qualification: document.getElementById('ph-form-qualification').value,
+                mobile: document.getElementById('ph-form-mobile').value,
+                joining_date: new Date().toISOString().split('T')[0]
+            };
+
+            await fetch('/api/pharmacists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            closeModal('modal-pharmacist');
+            this.loadPharmacists();
+        });
+    },
+
+    downloadPDFReport() {
+        const type = document.getElementById('report-select-type').value;
+        window.open(`/api/reports/generate?report_type=${encodeURIComponent(type)}`, '_blank');
+        closeModal('modal-report');
+    },
+
+    generateProfilePDF(storeId) {
+        window.open(`/api/reports/generate?report_type=Medical Store Profile PDF&store_id=${storeId}`, '_blank');
+    }
+};
+
+function openModal(id) { document.getElementById(id)?.classList.add('active'); }
+function closeModal(id) { document.getElementById(id)?.classList.remove('active'); }
+function closeDrawer(id) { document.getElementById(id)?.classList.remove('active'); }

@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BCWA Portal &bull; Boisar Welfare Chemist Association</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i data-lucide="cross"></i>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-name">BCWA Portal</span>
+                    <span class="brand-sub">Boisar Welfare Chemist Assoc.</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <a href="#dashboard" class="nav-item active" data-tab="dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#medical-stores" class="nav-item" data-tab="medical-stores">
+                    <i data-lucide="store"></i>
+                    <span>Medical Stores</span>
+                </a>
+                <a href="#pharmacists" class="nav-item" data-tab="pharmacists">
+                    <i data-lucide="user-check"></i>
+                    <span>Pharmacists</span>
+                </a>
+                <a href="#document-vault" class="nav-item" data-tab="document-vault">
+                    <i data-lucide="folder-lock"></i>
+                    <span>Document Vault</span>
+                </a>
+                <a href="#renewal-calendar" class="nav-item" data-tab="renewal-calendar">
+                    <i data-lucide="calendar"></i>
+                    <span>Renewal Calendar</span>
+                </a>
+                <a href="#notifications" class="nav-item" data-tab="notifications">
+                    <i data-lucide="bell"></i>
+                    <span>Notifications</span>
+                    <span class="nav-badge" id="notif-badge-count">0</span>
+                </a>
+                <a href="#activity-logs" class="nav-item" data-tab="activity-logs">
+                    <i data-lucide="activity"></i>
+                    <span>Activity Logs</span>
+                </a>
+                <a href="#admin" class="nav-item" data-tab="admin">
+                    <i data-lucide="shield-check"></i>
+                    <span>Admin</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="avatar">AD</div>
+                    <div class="user-details">
+                        <span class="user-name">BCWA Administrator</span>
+                        <span class="user-role badge-role-admin">Administrator</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-wrapper">
+            <header class="top-bar">
+                <div class="search-box">
+                    <i data-lucide="search"></i>
+                    <input type="text" id="global-search-input" placeholder="Search Store, Owner, Pharmacist, License #, FSSAI, PPP, MSPC, Mobile...">
+                </div>
+
+                <div class="top-actions">
+                    <button class="btn btn-secondary btn-sm" id="btn-generate-report">
+                        <i data-lucide="file-text"></i>
+                        <span>Reports</span>
+                    </button>
+                    <button class="btn btn-primary btn-sm" id="btn-ocr-scan">
+                        <i data-lucide="scan"></i>
+                        <span>OCR Scan &amp; Register</span>
+                    </button>
+                    <button class="btn btn-primary btn-sm" id="btn-add-store">
+                        <i data-lucide="plus"></i>
+                        <span>Register Store</span>
+                    </button>
+                </div>
+            </header>
+
+            <div class="content-container">
+                <section class="tab-pane active" id="pane-dashboard">
+                    <div class="pane-header">
+                        <div>
+                            <h2>Association Compliance Dashboard</h2>
+                            <p class="text-secondary">Real-time overview of Boisar pharmacy licenses, compliance, and expiring documents.</p>
+                        </div>
+                        <div class="last-updated">Updated just now &bull; Live Sync</div>
+                    </div>
+
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-blue"><i data-lucide="store"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Total Medical Stores</span>
+                                <span class="kpi-value" id="kpi-total-stores">20</span>
+                                <span class="kpi-sub">Registered in Boisar Zone</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-blue"><i data-lucide="users"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Total Pharmacists</span>
+                                <span class="kpi-value" id="kpi-total-pharmacists">48</span>
+                                <span class="kpi-sub">Active MSPC registered</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-warning"><i data-lucide="clock"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">DL Expiring (&lt;90 Days)</span>
+                                <span class="kpi-value" id="kpi-dl-expiring">0</span>
+                                <span class="kpi-sub">Requires 20B/21B renewal</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-warning"><i data-lucide="utensils"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Food Licenses Expiring</span>
+                                <span class="kpi-value" id="kpi-fssai-expiring">0</span>
+                                <span class="kpi-sub">FSSAI renewal pending</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-warning"><i data-lucide="id-card"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">PPP Cards Expiring</span>
+                                <span class="kpi-value" id="kpi-ppp-expiring">0</span>
+                                <span class="kpi-sub">Pharmacist PPP Cards</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-danger"><i data-lucide="alert-triangle"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Expired Documents</span>
+                                <span class="kpi-value text-danger" id="kpi-expired-docs">0</span>
+                                <span class="kpi-sub">Critical compliance issue</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-success"><i data-lucide="award"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Compliance Score</span>
+                                <span class="kpi-value text-success" id="kpi-compliance-score">85.4%</span>
+                                <span class="kpi-sub">Association average</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-icon icon-blue"><i data-lucide="bell"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Upcoming Renewals</span>
+                                <span class="kpi-value" id="kpi-upcoming-renewals">0</span>
+                                <span class="kpi-sub">Total action items</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="card card-wide">
+                            <div class="card-header">
+                                <h3>Compliance Trends &amp; Distribution</h3>
+                                <span class="badge badge-success">Association Health OK</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="progress-bar-stack">
+                                    <div class="progress-bar bar-excellent" style="width: 55%" title="Excellent (55%)"></div>
+                                    <div class="progress-bar bar-good" style="width: 28%" title="Good (28%)"></div>
+                                    <div class="progress-bar bar-warning" style="width: 12%" title="Needs Attention (12%)"></div>
+                                    <div class="progress-bar bar-danger" style="width: 5%" title="Critical (5%)"></div>
+                                </div>
+                                <div class="legend-row">
+                                    <span class="legend-item"><i class="dot dot-excellent"></i> Excellent (&ge;90%)</span>
+                                    <span class="legend-item"><i class="dot dot-good"></i> Good (75-89%)</span>
+                                    <span class="legend-item"><i class="dot dot-warning"></i> Needs Attention (50-74%)</span>
+                                    <span class="legend-item"><i class="dot dot-danger"></i> Critical (&lt;50%)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Recent System Activity</h3>
+                                <a href="#activity-logs" class="text-link">View All</a>
+                            </div>
+                            <div class="card-body">
+                                <div class="activity-feed" id="dashboard-activity-feed"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h3>Recently Registered Medical Stores</h3>
+                            <button class="btn btn-secondary btn-sm" id="btn-nav-stores">Manage Stores</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table" id="table-recent-stores">
+                                <thead>
+                                    <tr>
+                                        <th>Store Name</th>
+                                        <th>Shop Code</th>
+                                        <th>Owner Name</th>
+                                        <th>Compliance</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-medical-stores">
+                    <div class="pane-header">
+                        <div>
+                            <h2>Medical Store Management</h2>
+                            <p class="text-secondary">Directory of registered pharmacies, drug licenses, food licenses, and compliance scores.</p>
+                        </div>
+                        <button class="btn btn-primary" id="btn-add-store-tab">
+                            <i data-lucide="plus"></i>
+                            <span>Register Medical Store</span>
+                        </button>
+                    </div>
+
+                    <div class="filter-bar">
+                        <div class="filter-group">
+                            <label>Filter by Compliance:</label>
+                            <select id="filter-store-compliance" class="form-control">
+                                <option value="">All Scores</option>
+                                <option value="Excellent">Excellent (&ge;90%)</option>
+                                <option value="Good">Good (75-89%)</option>
+                                <option value="Needs Attention">Needs Attention (50-74%)</option>
+                                <option value="Critical">Critical (&lt;50%)</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-group">
+                            <label>Status:</label>
+                            <select id="filter-store-status" class="form-control">
+                                <option value="">All Statuses</option>
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="table-medical-stores">
+                                <thead>
+                                    <tr>
+                                        <th>Store &amp; Shop Code</th>
+                                        <th>Owner &amp; Contact</th>
+                                        <th>Drug License (20B / 21B)</th>
+                                        <th>FSSAI Food License</th>
+                                        <th>Pharmacists</th>
+                                        <th>Compliance</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-pharmacists">
+                    <div class="pane-header">
+                        <div>
+                            <h2>Pharmacist Directory</h2>
+                            <p class="text-secondary">Manage qualified pharmacists, MSPC registration, PPP Card expiry, and store assignments.</p>
+                        </div>
+                        <button class="btn btn-primary" id="btn-add-pharmacist">
+                            <i data-lucide="user-plus"></i>
+                            <span>Add Pharmacist</span>
+                        </button>
+                    </div>
+
+                    <div class="card">
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="table-pharmacists">
+                                <thead>
+                                    <tr>
+                                        <th>Pharmacist Name</th>
+                                        <th>MSPC Reg Number</th>
+                                        <th>PPP Number &amp; Expiry</th>
+                                        <th>Assigned Medical Store</th>
+                                        <th>Qualification</th>
+                                        <th>Contact</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-document-vault">
+                    <div class="pane-header">
+                        <div>
+                            <h2>Document Vault</h2>
+                            <p class="text-secondary">Structured Cloudinary folder repository for licenses, rent agreements, tax receipts, and compliance files.</p>
+                        </div>
+                        <button class="btn btn-primary" id="btn-upload-document">
+                            <i data-lucide="upload-cloud"></i>
+                            <span>Upload Document</span>
+                        </button>
+                    </div>
+
+                    <div class="vault-layout">
+                        <div class="vault-sidebar card">
+                            <h4>Document Folders</h4>
+                            <ul class="vault-folder-list" id="vault-folder-list">
+                                <li class="active" data-category="All"><i data-lucide="folder"></i> All Documents</li>
+                                <li data-category="Drug License"><i data-lucide="folder"></i> Drug License (20B/21B)</li>
+                                <li data-category="Food License"><i data-lucide="folder"></i> Food License (FSSAI)</li>
+                                <li data-category="PPP Cards"><i data-lucide="folder"></i> PPP Cards</li>
+                                <li data-category="Rent Agreement"><i data-lucide="folder"></i> Rent Agreements</li>
+                                <li data-category="Light Bill"><i data-lucide="folder"></i> Light Bills</li>
+                                <li data-category="Cold Storage Certificate"><i data-lucide="folder"></i> Cold Storage Certificates</li>
+                                <li data-category="Tax Receipt"><i data-lucide="folder"></i> Tax Receipts</li>
+                                <li data-category="Namuna 8"><i data-lucide="folder"></i> Namuna 8</li>
+                                <li data-category="Owner Aadhaar"><i data-lucide="folder"></i> Owner Aadhaar &amp; PAN</li>
+                                <li data-category="Other Documents"><i data-lucide="folder"></i> Other Documents</li>
+                            </ul>
+                        </div>
+
+                        <div class="vault-content card">
+                            <div class="card-header">
+                                <h3 id="vault-current-category">All Documents</h3>
+                                <span class="badge badge-info" id="vault-doc-count">0 files</span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table" id="table-documents">
+                                    <thead>
+                                        <tr>
+                                            <th>Document Title</th>
+                                            <th>Store Name</th>
+                                            <th>Category</th>
+                                            <th>Quality Check</th>
+                                            <th>Expiry Date</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-renewal-calendar">
+                    <div class="pane-header">
+                        <div>
+                            <h2>Interactive Renewal Calendar</h2>
+                            <p class="text-secondary">Track upcoming drug license, FSSAI, and PPP card expiry deadlines with color-coded status.</p>
+                        </div>
+                        <div class="calendar-legend">
+                            <span class="badge badge-success"><i class="dot dot-excellent"></i> Valid (&gt;90 Days)</span>
+                            <span class="badge badge-warning"><i class="dot dot-warning"></i> Expiring Soon (&le;90 Days)</span>
+                            <span class="badge badge-danger"><i class="dot dot-danger"></i> Expired</span>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="calendar-grid-container">
+                            <div class="calendar-month-header">
+                                <h3 id="calendar-month-title">August 2026</h3>
+                            </div>
+                            <div class="calendar-days-header">
+                                <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+                            </div>
+                            <div class="calendar-grid" id="calendar-grid"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-notifications">
+                    <div class="pane-header">
+                        <div>
+                            <h2>Automated Notifications &amp; Reminders</h2>
+                            <p class="text-secondary">System alerts for 90, 60, 30, 15, 7, 1 day, and expired document reminders.</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="notifications-list" id="notifications-list"></div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-activity-logs">
+                    <div class="pane-header">
+                        <div>
+                            <h2>System Activity Audit Trail</h2>
+                            <p class="text-secondary">Immutable log of store registrations, updates, pharmacist transfers, and document actions.</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="table-responsive">
+                            <table class="table" id="table-activity-logs">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>User</th>
+                                        <th>Action</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-admin">
+                    <div class="pane-header">
+                        <div>
+                            <h2>User &amp; Access Management</h2>
+                            <p class="text-secondary">Role-based access control for Administrators, Office Staff, and Read Only Auditors.</p>
+                        </div>
+                        <button class="btn btn-primary" id="btn-add-user">
+                            <i data-lucide="user-plus"></i>
+                            <span>Add System User</span>
+                        </button>
+                    </div>
+
+                    <div class="card">
+                        <div class="table-responsive">
+                            <table class="table" id="table-admin-users">
+                                <thead>
+                                    <tr>
+                                        <th>User Name</th>
+                                        <th>Email Address</th>
+                                        <th>Role</th>
+                                        <th>Status</th>
+                                        <th>Last Login</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div class="drawer-overlay" id="drawer-store-profile">
+        <div class="drawer-content">
+            <div class="drawer-header">
+                <h3>Medical Store Profile</h3>
+                <button class="btn-close" onclick="closeDrawer('drawer-store-profile')">&times;</button>
+            </div>
+            <div class="drawer-body" id="store-profile-body"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-store">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="modal-store-title">Register Medical Store</h3>
+                <button class="btn-close" onclick="closeModal('modal-store')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning hidden" id="store-duplicate-warning"></div>
+
+                <form id="form-store">
+                    <input type="hidden" id="store-form-id">
+                    <div class="form-grid">
+                        <div class="form-group span-2">
+                            <label>Medical Store Name *</label>
+                            <input type="text" id="store-form-name" class="form-control" required placeholder="e.g. Sai Chemist & Druggist">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Business Type</label>
+                            <select id="store-form-business-type" class="form-control">
+                                <option value="Retail Pharmacy">Retail Pharmacy</option>
+                                <option value="Wholesale Chemist">Wholesale Chemist</option>
+                                <option value="Hospital Pharmacy">Hospital Pharmacy</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Drug License Category</label>
+                            <select id="store-form-dl-cat" class="form-control">
+                                <option value="20B / 21B">20B / 21B</option>
+                                <option value="20F / 21F">20F / 21F</option>
+                                <option value="20G / 21G">20G / 21G</option>
+                            </select>
+                        </div>
+
+                        <div class="form-section-title span-2">Owner Information</div>
+
+                        <div class="form-group">
+                            <label>Owner Full Name *</label>
+                            <input type="text" id="store-form-owner-name" class="form-control" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Mobile Number *</label>
+                            <input type="text" id="store-form-owner-mobile" class="form-control" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>WhatsApp Number</label>
+                            <input type="text" id="store-form-owner-whatsapp" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Email Address</label>
+                            <input type="email" id="store-form-owner-email" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Owner PAN Number</label>
+                            <input type="text" id="store-form-owner-pan" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Owner Aadhaar Number</label>
+                            <input type="text" id="store-form-owner-aadhaar" class="form-control">
+                        </div>
+
+                        <div class="form-section-title span-2">Drug &amp; Food License Details</div>
+
+                        <div class="form-group">
+                            <label>20B License Number *</label>
+                            <input type="text" id="store-form-dl-20b" class="form-control" required placeholder="MH-TZ4-XXXXXX">
+                        </div>
+
+                        <div class="form-group">
+                            <label>21B License Number *</label>
+                            <input type="text" id="store-form-dl-21b" class="form-control" required placeholder="MH-TZ4-XXXXXX">
+                        </div>
+
+                        <div class="form-group">
+                            <label>DL Issue Date *</label>
+                            <input type="date" id="store-form-dl-issue" class="form-control" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>DL Expiry Date *</label>
+                            <input type="date" id="store-form-dl-expiry" class="form-control" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>FSSAI Food License Number *</label>
+                            <input type="text" id="store-form-fssai" class="form-control" required placeholder="21524XXXXXXXXX">
+                        </div>
+
+                        <div class="form-group">
+                            <label>FSSAI Expiry Date *</label>
+                            <input type="date" id="store-form-fssai-expiry" class="form-control" required>
+                        </div>
+
+                        <div class="form-section-title span-2">Address &amp; Location</div>
+
+                        <div class="form-group span-2">
+                            <label>Address Line 1 *</label>
+                            <input type="text" id="store-form-address" class="form-control" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Area / Locality</label>
+                            <input type="text" id="store-form-area" class="form-control" value="Boisar">
+                        </div>
+
+                        <div class="form-group">
+                            <label>City &amp; Pincode</label>
+                            <input type="text" id="store-form-city-pin" class="form-control" value="Palghar - 401501">
+                        </div>
+                    </div>
+
+                    <div class="modal-footer mt-4">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-store')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Medical Store</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-ocr">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>OCR Document Auto-Fill Parser</h3>
+                <button class="btn-close" onclick="closeModal('modal-ocr')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="text-secondary">Upload a Drug License, FSSAI Certificate, or PPP Card to automatically extract details using Google Vision OCR / EasyOCR.</p>
+
+                <div class="ocr-dropzone" id="ocr-dropzone">
+                    <i data-lucide="scan" class="ocr-icon"></i>
+                    <p><strong>Click or Drag Document File Here</strong></p>
+                    <span class="text-secondary">Supports PDF, JPG, PNG files</span>
+                    <input type="file" id="ocr-file-input" class="hidden" accept=".pdf,.jpg,.jpeg,.png">
+                </div>
+
+                <div class="ocr-result-box hidden" id="ocr-result-box">
+                    <div class="badge badge-success mb-2"><i data-lucide="check-circle"></i> OCR Text Extraction Complete (Confidence: 98.4%)</div>
+                    <div class="ocr-fields" id="ocr-fields-output"></div>
+                    <p class="text-sm text-secondary mt-2">&bull; Review and adjust extracted fields before applying to registration form.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-ocr')">Cancel</button>
+                <button class="btn btn-primary hidden" id="btn-apply-ocr">Apply Extracted Data</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-pharmacist">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-ph-title">Add Pharmacist</h3>
+                <button class="btn-close" onclick="closeModal('modal-pharmacist')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-pharmacist">
+                    <input type="hidden" id="ph-form-id">
+                    <div class="form-group">
+                        <label>Full Name *</label>
+                        <input type="text" id="ph-form-name" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>MSPC Registration Number *</label>
+                        <input type="text" id="ph-form-mspc" class="form-control" required placeholder="MSPC-XXXXXX">
+                    </div>
+
+                    <div class="form-group">
+                        <label>PPP Number *</label>
+                        <input type="text" id="ph-form-ppp" class="form-control" required placeholder="PPP-MH-XXXXXX">
+                    </div>
+
+                    <div class="form-group">
+                        <label>PPP Expiry Date *</label>
+                        <input type="date" id="ph-form-ppp-expiry" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Assign to Medical Store</label>
+                        <select id="ph-form-store-id" class="form-control"></select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Qualification</label>
+                        <select id="ph-form-qualification" class="form-control">
+                            <option value="B.Pharm">B.Pharm</option>
+                            <option value="D.Pharm">D.Pharm</option>
+                            <option value="M.Pharm">M.Pharm</option>
+                            <option value="Pharm.D">Pharm.D</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Mobile Number *</label>
+                        <input type="text" id="ph-form-mobile" class="form-control" required>
+                    </div>
+
+                    <div class="modal-footer mt-4">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-pharmacist')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Pharmacist</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-transfer-pharmacist">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Transfer Pharmacist</h3>
+                <button class="btn-close" onclick="closeModal('modal-transfer-pharmacist')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="transfer-ph-id">
+                <p>Transferring <strong id="transfer-ph-name">Pharmacist</strong> to a new Medical Store.</p>
+                
+                <div class="form-group mt-3">
+                    <label>Select New Medical Store *</label>
+                    <select id="transfer-new-store-id" class="form-control" required></select>
+                </div>
+
+                <div class="form-group mt-3">
+                    <label>New Joining Date *</label>
+                    <input type="date" id="transfer-joining-date" class="form-control" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-transfer-pharmacist')">Cancel</button>
+                <button class="btn btn-primary" id="btn-confirm-transfer">Confirm Transfer</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-report">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Generate Association Compliance Reports</h3>
+                <button class="btn-close" onclick="closeModal('modal-report')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Report Type *</label>
+                    <select id="report-select-type" class="form-control">
+                        <option value="Association Summary Report">Association Summary Report</option>
+                        <option value="Compliance Report">Compliance Breakdown Report</option>
+                        <option value="Renewal Report">Upcoming Renewals Report</option>
+                        <option value="Pharmacist Report">Pharmacist Directory Report</option>
+                        <option value="Expiry Report">Expired Documents Report</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-report')">Cancel</button>
+                <button class="btn btn-primary" id="btn-download-pdf-report">
+                    <i data-lucide="download"></i>
+                    <span>Generate &amp; Download PDF</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
