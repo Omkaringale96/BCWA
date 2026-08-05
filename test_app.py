@@ -72,5 +72,49 @@ class BCWAPortalTestCase(unittest.TestCase):
         self.assertEqual(response_bar.mimetype, 'image/svg+xml')
         print("QR Code & Barcode SVG Generator Test Passed.")
 
+    def test_security_headers(self):
+        res = self.app.get('/')
+        self.assertEqual(res.headers.get('X-Frame-Options'), 'DENY')
+        self.assertEqual(res.headers.get('X-Content-Type-Options'), 'nosniff')
+        self.assertIn('no-store', res.headers.get('Cache-Control', ''))
+        print("Security Headers Test Passed.")
+
+    def test_failed_login_lockout(self):
+        from app import reset_login_lockout
+        reset_login_lockout('127.0.0.1')
+        # 5 failed attempts from same IP
+        for _ in range(5):
+            self.app.post('/api/auth/login', json={'username': 'INVALID', 'password': 'WRONG'})
+        
+        # 6th attempt should return 429 Lockout
+        res = self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
+        self.assertEqual(res.status_code, 429)
+        data = res.get_json()
+        self.assertIn('Too many failed attempts', data.get('error', ''))
+        print("Failed Login Lockout Test Passed.")
+
+    def test_session_management(self):
+        from app import reset_login_lockout
+        reset_login_lockout('127.0.0.1')
+
+        # Successful Login
+        res = self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
+        self.assertEqual(res.status_code, 200)
+
+        # Verify Session Active
+        res_sess = self.app.get('/api/auth/session')
+        self.assertEqual(res_sess.status_code, 200)
+        self.assertTrue(res_sess.get_json().get('authenticated'))
+
+        # Logout
+        res_out = self.app.post('/api/auth/logout')
+        self.assertEqual(res_out.status_code, 200)
+
+        # Verify Session Destroyed
+        res_sess_after = self.app.get('/api/auth/session')
+        self.assertEqual(res_sess_after.status_code, 401)
+        print("Session Management Test Passed.")
+
 if __name__ == '__main__':
     unittest.main()
+

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, send_file, Response
+from flask import Flask, request, jsonify, render_template, send_file, Response, session
 from flask_cors import CORS
 import os
 import io
@@ -11,17 +11,78 @@ from database import (
     save_medical_store, delete_medical_store, get_pharmacists, save_pharmacist,
     transfer_pharmacist, delete_pharmacist, get_documents, save_document,
     delete_document, get_renewal_calendar_events, get_notifications,
-    mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates
+    mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates,
+    log_activity
 )
 from seed_data import generate_seed_data
 from supabase_client import upload_to_supabase_storage, test_supabase_connection, db_table
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
-CORS(app)
-app.config['SECRET_KEY'] = 'bcwa_portal_secret_key_2026'
+CORS(app, supports_credentials=True)
+
+# -----------------------------------------------------------------------------
+# SESSION SECURITY & CONFIGURATION
+# -----------------------------------------------------------------------------
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'bcwa_portal_enterprise_security_key_2026')
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production HTTPS
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
 
 init_db()
 generate_seed_data()
+
+# Lockout tracker for failed login attempts (5 attempts -> 5 minute lockout)
+failed_attempts_tracker = {}
+
+def get_client_ip():
+    return request.headers.get('X-Forwarded-For', request.remote_addr or '127.0.0.1').split(',')[0].strip()
+
+def check_ip_lockout(ip):
+    record = failed_attempts_tracker.get(ip)
+    if not record:
+        return False, 0
+    count, lock_until = record
+    if count >= 5:
+        if datetime.now() < lock_until:
+            remaining = int((lock_until - datetime.now()).total_seconds())
+            return True, remaining
+        else:
+            failed_attempts_tracker.pop(ip, None)
+            return False, 0
+    return False, 0
+
+def record_failed_login(ip):
+    count, _ = failed_attempts_tracker.get(ip, (0, None))
+    count += 1
+    if count >= 5:
+        lock_until = datetime.now() + timedelta(minutes=5)
+        failed_attempts_tracker[ip] = (count, lock_until)
+    else:
+        failed_attempts_tracker[ip] = (count, None)
+
+def reset_login_lockout(ip):
+    failed_attempts_tracker.pop(ip, None)
+
+def audit_security_log(action, details, user_name="System"):
+    ip = get_client_ip()
+    user_agent = request.user_agent.string if request.user_agent else "Unknown Browser"
+    full_details = f"{details} | IP: {ip} | User-Agent: {user_agent}"
+    log_activity(user_name=user_name, action=action, details=full_details)
+
+# -----------------------------------------------------------------------------
+# EXTRA SECURITY HEADERS & NO-CACHE
+# -----------------------------------------------------------------------------
+@app.after_request
+def apply_security_headers(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Content-Security-Policy'] = "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval';"
+    return response
 
 # -----------------------------------------------------------------------------
 # HEALTH CHECK API
@@ -38,10 +99,16 @@ def health_check():
     })
 
 # -----------------------------------------------------------------------------
-# AUTHENTICATION API
+# AUTHENTICATION API & SESSION SECURITY
 # -----------------------------------------------------------------------------
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
+    ip = get_client_ip()
+    is_locked, remaining_secs = check_ip_lockout(ip)
+    if is_locked:
+        audit_security_log("Failed Login Blocked", f"Lockout active ({remaining_secs}s remaining)", username if 'username' in locals() else "Unknown")
+        return jsonify({'success': False, 'error': 'Too many failed attempts. Try again later.'}), 429
+
     data = request.json or {}
     username = (data.get('username') or data.get('officer_id') or '').strip()
     password = (data.get('password') or '').strip()
@@ -49,43 +116,83 @@ def api_login():
     if not username or not password:
         return jsonify({'success': False, 'error': 'Officer ID / Email and Password required'}), 400
 
+    user_found = None
     try:
         users = db_table('users').select('*').execute().data
         matched = [u for u in users if (str(u.get('id', '')).lower() == username.lower() or str(u.get('email', '')).lower() == username.lower()) and u.get('password') == password]
         if matched and matched[0].get('status') == 'Active':
-            user = matched[0]
-            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            db_table('users').update({'last_login': now_str}).eq('id', user['id']).execute()
-
-            return jsonify({
-                'success': True,
-                'user': {
-                    'id': user['id'],
-                    'officer_id': user['id'],
-                    'name': user['name'],
-                    'email': user['email'],
-                    'role': user['role'],
-                    'status': user['status']
-                }
-            })
+            user_found = matched[0]
     except Exception as e:
         pass
 
     # Hardcoded Administrator fallback check for Vinayak (VIN2821 / 2821)
-    if (username.upper() == 'VIN2821' or username.lower() == 'vin2821@bcwaportal.in' or username.lower() == 'vinayak') and password == '2821':
+    if not user_found and (username.upper() == 'VIN2821' or username.lower() == 'vin2821@bcwaportal.in' or username.lower() == 'vinayak') and password == '2821':
+        user_found = {
+            'id': 'VIN2821',
+            'officer_id': 'VIN2821',
+            'name': 'Vinayak',
+            'email': 'vin2821@bcwaportal.in',
+            'role': 'Administrator',
+            'status': 'Active'
+        }
+
+    if user_found:
+        reset_login_lockout(ip)
+        
+        # Regenerate session to prevent session fixation
+        session.clear()
+        session.permanent = True
+        
+        user_payload = {
+            'id': user_found['id'],
+            'officer_id': user_found.get('officer_id', user_found['id']),
+            'name': user_found['name'],
+            'email': user_found['email'],
+            'role': user_found['role'],
+            'status': user_found['status']
+        }
+        session['user'] = user_payload
+        
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            db_table('users').update({'last_login': now_str}).eq('id', user_found['id']).execute()
+        except Exception:
+            pass
+
+        audit_security_log("Successful Login", f"Officer '{user_found['name']}' logged in successfully.", user_name=user_found['name'])
+
         return jsonify({
             'success': True,
-            'user': {
-                'id': 'VIN2821',
-                'officer_id': 'VIN2821',
-                'name': 'Vinayak',
-                'email': 'vin2821@bcwaportal.in',
-                'role': 'Administrator',
-                'status': 'Active'
-            }
+            'user': user_payload
         })
 
+    # Failed login
+    record_failed_login(ip)
+    audit_security_log("Failed Login", f"Invalid login attempt for username '{username}'", user_name=username or "Anonymous")
     return jsonify({'success': False, 'error': 'Invalid Officer ID or Password'}), 401
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_logout():
+    user = session.get('user')
+    user_name = user.get('name') if user else "Officer"
+    audit_security_log("Logout", f"Officer '{user_name}' signed out.", user_name=user_name)
+    session.clear()
+    return jsonify({'success': True, 'message': 'Logged out successfully'})
+
+@app.route('/api/auth/timeout', methods=['POST'])
+def api_session_timeout():
+    user = session.get('user')
+    user_name = user.get('name') if user else "Officer"
+    audit_security_log("Session Timeout", f"Session expired due to 1 minute inactivity for '{user_name}'.", user_name=user_name)
+    session.clear()
+    return jsonify({'success': True, 'message': 'Session expired due to inactivity.'})
+
+@app.route('/api/auth/session', methods=['GET'])
+def api_check_session():
+    user = session.get('user')
+    if user:
+        return jsonify({'authenticated': True, 'user': user})
+    return jsonify({'authenticated': False}), 401
 
 @app.route('/api/ocr/extract', methods=['POST'])
 def ocr_extract():

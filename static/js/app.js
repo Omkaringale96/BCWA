@@ -3,10 +3,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const BCWAApp = {
-    currentTab: 'dashboard',
-    currentUser: null,
-    storesCache: [],
-    pharmacistsCache: [],
+    inactivityTimer: null,
+    INACTIVITY_TIMEOUT_MS: 60000, // 60 seconds inactivity auto-logout
 
     init() {
         this.bindAuth();
@@ -15,7 +13,43 @@ const BCWAApp = {
         this.bindModals();
         this.bindFormSubmissions();
         this.bindOCRScanner();
+        this.bindInactivityTracker();
+        this.preventBackNavigation();
         this.checkAuth();
+    },
+
+    bindInactivityTracker() {
+        const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'pointermove'];
+        events.forEach(evt => {
+            window.addEventListener(evt, () => this.resetInactivityTimer(), { passive: true });
+        });
+    },
+
+    resetInactivityTimer() {
+        if (!this.currentUser) return;
+        clearTimeout(this.inactivityTimer);
+        this.inactivityTimer = setTimeout(() => {
+            this.handleSessionTimeout();
+        }, this.INACTIVITY_TIMEOUT_MS);
+    },
+
+    async handleSessionTimeout() {
+        clearTimeout(this.inactivityTimer);
+        try {
+            await fetch('/api/auth/timeout', { method: 'POST' });
+        } catch (e) {}
+        
+        localStorage.removeItem('bcwa_user');
+        this.currentUser = null;
+        this.showLoginScreen('Your session expired due to inactivity.');
+    },
+
+    preventBackNavigation() {
+        window.addEventListener('pageshow', (event) => {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
     },
 
     // -------------------------------------------------------------------------
@@ -27,11 +61,13 @@ const BCWAApp = {
 
         loginForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const username = document.getElementById('login-username').value.trim();
-            const password = document.getElementById('login-password').value.trim();
+            const usernameInput = document.getElementById('login-username');
+            const passwordInput = document.getElementById('login-password');
+            const username = usernameInput ? usernameInput.value.trim() : '';
+            const password = passwordInput ? passwordInput.value.trim() : '';
             const alertBox = document.getElementById('login-error-alert');
 
-            alertBox.classList.add('hidden');
+            if (alertBox) alertBox.classList.add('hidden');
 
             try {
                 const res = await fetch('/api/auth/login', {
@@ -47,40 +83,38 @@ const BCWAApp = {
                     localStorage.setItem('bcwa_user', JSON.stringify(data.user));
                     this.renderAuthenticatedUI();
                     return;
-                } else if (data.error) {
-                    alertBox.textContent = data.error;
+                } else if (alertBox) {
+                    alertBox.textContent = data.error || 'Invalid Officer ID or Password';
                     alertBox.classList.remove('hidden');
                     return;
                 }
             } catch (err) {
-                console.warn('API auth endpoint error, evaluating fallback auth:', err);
-            }
-
-            // Fallback check for Administrator Vinayak (VIN2821 / 2821)
-            if ((username.toUpperCase() === 'VIN2821' || username.toLowerCase() === 'vinayak' || username.toLowerCase() === 'vin2821@bcwaportal.in') && password === '2821') {
-                const fallbackUser = {
-                    id: 'VIN2821',
-                    officer_id: 'VIN2821',
-                    name: 'Vinayak',
-                    email: 'vin2821@bcwaportal.in',
-                    role: 'Administrator',
-                    status: 'Active'
-                };
-                this.currentUser = fallbackUser;
-                localStorage.setItem('bcwa_user', JSON.stringify(fallbackUser));
-                this.renderAuthenticatedUI();
-            } else {
-                alertBox.textContent = 'Invalid Officer ID or Password';
-                alertBox.classList.remove('hidden');
+                if (alertBox) {
+                    alertBox.textContent = 'Server connection error. Please try again.';
+                    alertBox.classList.remove('hidden');
+                }
             }
         });
 
-        logoutBtn?.addEventListener('click', () => {
-            this.logout();
+        logoutBtn?.addEventListener('click', async () => {
+            await this.logout();
         });
     },
 
-    checkAuth() {
+    async checkAuth() {
+        try {
+            const res = await fetch('/api/auth/session');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.authenticated && data.user) {
+                    this.currentUser = data.user;
+                    localStorage.setItem('bcwa_user', JSON.stringify(data.user));
+                    this.renderAuthenticatedUI();
+                    return;
+                }
+            }
+        } catch (e) {}
+
         const stored = localStorage.getItem('bcwa_user');
         if (stored) {
             try {
@@ -94,7 +128,32 @@ const BCWAApp = {
         this.showLoginScreen();
     },
 
-    showLoginScreen() {
+    async logout() {
+        clearTimeout(this.inactivityTimer);
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (e) {}
+        localStorage.removeItem('bcwa_user');
+        this.currentUser = null;
+        this.showLoginScreen();
+    },
+
+    showLoginScreen(message = null) {
+        clearTimeout(this.inactivityTimer);
+        const usernameInput = document.getElementById('login-username');
+        const passwordInput = document.getElementById('login-password');
+        const alertBox = document.getElementById('login-error-alert');
+
+        if (usernameInput) usernameInput.value = '';
+        if (passwordInput) passwordInput.value = '';
+
+        if (message && alertBox) {
+            alertBox.textContent = message;
+            alertBox.classList.remove('hidden');
+        } else if (alertBox) {
+            alertBox.classList.add('hidden');
+        }
+
         document.getElementById('login-screen')?.classList.remove('hidden');
         document.querySelector('.app-layout')?.classList.add('hidden');
         lucide.createIcons();
@@ -105,11 +164,16 @@ const BCWAApp = {
         document.querySelector('.app-layout')?.classList.remove('hidden');
 
         if (this.currentUser) {
-            document.getElementById('sidebar-avatar').textContent = this.currentUser.name ? this.currentUser.name.charAt(0).toUpperCase() : 'V';
-            document.getElementById('sidebar-user-name').textContent = this.currentUser.name || 'Vinayak';
-            document.getElementById('sidebar-user-role').innerHTML = `Officer ID: <strong>${this.currentUser.officer_id || 'VIN2821'}</strong> &bull; ${this.currentUser.role || 'Administrator'}`;
+            const avatarEl = document.getElementById('sidebar-avatar');
+            const userNameEl = document.getElementById('sidebar-user-name') || document.getElementById('current-user-name');
+            const userRoleEl = document.getElementById('sidebar-user-role') || document.getElementById('current-user-role');
+            
+            if (avatarEl) avatarEl.textContent = this.currentUser.name ? this.currentUser.name.charAt(0).toUpperCase() : 'V';
+            if (userNameEl) userNameEl.textContent = this.currentUser.name || 'Vinayak';
+            if (userRoleEl) userRoleEl.textContent = this.currentUser.role || 'Administrator';
         }
 
+        this.resetInactivityTimer();
         this.loadDashboardData();
         lucide.createIcons();
     },
