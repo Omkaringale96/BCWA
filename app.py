@@ -20,7 +20,8 @@ from supabase_client import upload_to_supabase_storage, test_supabase_connection
 from notification_engine import (
     scan_and_send_expiring_reminders,
     start_background_notification_scheduler,
-    generate_reminder_html_email
+    generate_reminder_html_email,
+    send_admin_test_email
 )
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -700,6 +701,32 @@ def api_pdf_notification_log(log_id):
         })
     except Exception as e:
         return jsonify({'error': f"Failed to generate PDF: {str(e)}"}), 500
+
+@app.route('/api/admin/send-test-email', methods=['POST'])
+def api_admin_send_test_email():
+    user = session.get('user')
+    if not user or user.get('role') != 'Administrator':
+        return jsonify({'success': False, 'error': 'Administrator access required'}), 403
+
+    try:
+        res = send_admin_test_email()
+        if res.get('success'):
+            return jsonify({
+                'success': True,
+                'message': f"Test email successfully dispatched to {res.get('email')}",
+                'details': res
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f"SMTP Error: {res.get('error')}",
+                'details': res
+            }), 500
+    except Exception as e:
+        import traceback
+        err_msg = str(e)
+        logging.error(f"[TEST EMAIL ROUTE EXCEPTION] {err_msg}\n{traceback.format_exc()}")
+        return jsonify({'success': False, 'error': f"Server Exception: {err_msg}"}), 500
 
 @app.errorhandler(500)
 def handle_500_error(e):

@@ -551,6 +551,33 @@ const BCWAApp = {
         }
     },
 
+    async sendTestEmail() {
+        const btn = document.getElementById('btn-send-test-email');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = 'Sending...';
+        }
+
+        try {
+            const res = await fetch('/api/admin/send-test-email', { method: 'POST' });
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                alert(`✅ Success!\n\n${data.message}\n\nSMTP Status: ${data.details.response}`);
+            } else {
+                alert(`❌ Email Dispatch Failed!\n\n${data.error || 'SMTP Connection Error'}`);
+            }
+        } catch (e) {
+            alert(`❌ Exception: Could not connect to backend server (${e.message})`);
+        }
+
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="mail-check"></i> <span>Send Test Email</span>';
+            lucide.createIcons();
+        }
+    },
+
     async markRead(id) {
         await fetch(`/api/notifications/${id}/read`, { method: 'PUT' });
         this.loadNotifications();

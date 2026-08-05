@@ -130,6 +130,90 @@ def send_smtp_email(to_email, subject, html_body):
         logging.error(f"[SMTP ERROR] Failed to send email to {to_email}: {err_msg}")
         return False, err_msg
 
+def generate_smtp_test_html_email(recipient_email, server_time, environment, supabase_status, smtp_status, render_id):
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F3F4F6; margin: 0; padding: 0; }}
+            .container {{ max-width: 600px; margin: 20px auto; background: #FFFFFF; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }}
+            .header {{ background-color: #1E3A8A; padding: 24px; text-align: center; color: #FFFFFF; }}
+            .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; }}
+            .header p {{ margin: 4px 0 0 0; font-size: 13px; opacity: 0.9; }}
+            .content {{ padding: 28px; }}
+            .status-banner {{ background-color: #DEF7EC; border: 1px solid #31C48D; color: #03543F; padding: 14px; border-radius: 6px; text-align: center; font-weight: 700; font-size: 15px; margin-bottom: 20px; }}
+            .info-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
+            .info-table td {{ padding: 10px 12px; border-bottom: 1px solid #E5E7EB; font-size: 14px; }}
+            .info-label {{ color: #6B7280; font-weight: 600; width: 45%; }}
+            .info-val {{ color: #1F2937; font-weight: 700; }}
+            .footer {{ background-color: #F8FAFC; padding: 18px; text-align: center; font-size: 12px; color: #64748B; border-top: 1px solid #E2E8F0; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>BOISAR WELFARE CHEMIST ASSOCIATION</h1>
+                <p>System Administrator SMTP Diagnostic Tool</p>
+            </div>
+
+            <div class="content">
+                <div class="status-banner">
+                    ✅ BCWA SMTP Test Successful
+                </div>
+
+                <p style="color: #4B5563; line-height: 1.5; font-size: 14px;">
+                    This email confirms that Brevo / SMTP configuration for <strong>{recipient_email}</strong> is operational and sending emails correctly.
+                </p>
+
+                <table class="info-table">
+                    <tr><td class="info-label">Server Time (UTC):</td><td class="info-val">{server_time}</td></tr>
+                    <tr><td class="info-label">Environment:</td><td class="info-val">{environment}</td></tr>
+                    <tr><td class="info-label">Supabase Connection:</td><td class="info-val">{supabase_status}</td></tr>
+                    <tr><td class="info-label">SMTP Status:</td><td class="info-val">{smtp_status}</td></tr>
+                    <tr><td class="info-label">Render Deployment ID:</td><td class="info-val">{render_id}</td></tr>
+                </table>
+            </div>
+
+            <div class="footer">
+                <p>&copy; 2026 Boisar Welfare Chemist Association (BCWA). System Admin Diagnostics.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+def send_admin_test_email():
+    cfg = get_smtp_config()
+    to_email = cfg['from_email']
+    subject = "BCWA SMTP Test Successful"
+
+    from supabase_client import test_supabase_connection
+    connected, _ = test_supabase_connection()
+    supabase_status = "Connected" if connected else "Degraded"
+
+    env_mode = os.environ.get('FLASK_ENV', 'development').capitalize()
+    render_id = os.environ.get('RENDER_SERVICE_ID', 'Localhost Server')
+    server_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+    smtp_status = f"Connected via {cfg['host']}:{cfg['port']}"
+
+    html = generate_smtp_test_html_email(to_email, server_time, env_mode, supabase_status, smtp_status, render_id)
+
+    try:
+        ok, msg = send_smtp_email(to_email, subject, html)
+        if ok:
+            logging.info(f"[SMTP TEST SUCCESS] Test email sent to {to_email}. Response: {msg}")
+            return {'success': True, 'email': to_email, 'response': msg}
+        else:
+            logging.error(f"[SMTP TEST ERROR] Test email to {to_email} failed: {msg}")
+            return {'success': False, 'email': to_email, 'error': msg}
+    except Exception as e:
+        import traceback
+        err_msg = str(e)
+        logging.error(f"[SMTP TEST EXCEPTION] Exception sending test email: {err_msg}\n{traceback.format_exc()}")
+        return {'success': False, 'email': to_email, 'error': err_msg}
+
 def match_reminder_stage(days):
     for stage in REMINDER_STAGES:
         if days == stage or (stage == 0 and days <= 0):

@@ -543,10 +543,16 @@
                             <h2>User &amp; Access Management</h2>
                             <p class="text-secondary">Role-based access control for Administrators, Office Staff, and Read Only Auditors.</p>
                         </div>
-                        <button class="btn btn-primary" id="btn-add-user">
-                            <i data-lucide="user-plus"></i>
-                            <span>Add System User</span>
-                        </button>
+                        <div style="display:flex; gap:10px;">
+                            <button class="btn btn-secondary" id="btn-send-test-email" onclick="BCWAApp.sendTestEmail()">
+                                <i data-lucide="mail-check"></i>
+                                <span>Send Test Email</span>
+                            </button>
+                            <button class="btn btn-primary" id="btn-add-user">
+                                <i data-lucide="user-plus"></i>
+                                <span>Add System User</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="card">

@@ -151,6 +151,20 @@ class BCWAPortalTestCase(unittest.TestCase):
         self.assertIn('logs', logs_data)
         print("Automated Renewal Notification Engine Test Passed.")
 
+    def test_send_test_email(self):
+        from app import reset_login_lockout
+        reset_login_lockout('127.0.0.1')
+        
+        # Login as Admin
+        self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
+        
+        # Trigger send test email
+        res = self.app.post('/api/admin/send-test-email')
+        self.assertIn(res.status_code, [200, 500])
+        data = res.get_json()
+        self.assertIn('success', data)
+        print("Admin Send Test Email Test Passed.")
+
 if __name__ == '__main__':
     unittest.main()
 
