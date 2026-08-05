@@ -48,30 +48,49 @@ def get_supabase_credentials():
     url = (os.environ.get('SUPABASE_URL') or '').strip().strip('"').strip("'")
     service_key = (os.environ.get('SUPABASE_SERVICE_KEY') or os.environ.get('SUPABASE_KEY') or '').strip().strip('"').strip("'")
     anon_key = (os.environ.get('SUPABASE_ANON_KEY') or '').strip().strip('"').strip("'")
-    key_to_use = service_key if service_key else anon_key
-    return url, key_to_use
+
+    keys_to_try = []
+    if service_key:
+        keys_to_try.append(('SUPABASE_SERVICE_KEY', service_key))
+    if anon_key and anon_key != service_key:
+        keys_to_try.append(('SUPABASE_ANON_KEY', anon_key))
+
+    return url, keys_to_try
 
 def get_supabase_client():
     """
-    Initializes and returns official Supabase Client using SUPABASE_URL and SUPABASE_SERVICE_KEY.
+    Initializes and returns official Supabase Client using SUPABASE_URL and SUPABASE_SERVICE_KEY / SUPABASE_ANON_KEY.
     """
     global _client_instance
     if _client_instance:
         return _client_instance
 
-    url, key_to_use = get_supabase_credentials()
+    url, keys_to_try = get_supabase_credentials()
 
-    if not url or not key_to_use:
+    if not url or not keys_to_try:
         return None
 
     if HAS_SUPABASE_SDK:
-        try:
-            _client_instance = create_client(url, key_to_use)
-            return _client_instance
-        except Exception as e:
-            logging.error(f"Supabase client initialization failed: {e}")
-            logging.error(traceback.format_exc())
-            return None
+        for key_name, key in keys_to_try:
+            try:
+                _client_instance = create_client(url, key)
+                print(f"[SUPABASE SUCCESS] Initialized Supabase client using {key_name}.")
+                logging.info(f"Initialized Supabase client using {key_name}.")
+                return _client_instance
+            except Exception as e:
+                msg = str(e)
+                if "Invalid API key" in msg:
+                    print(f"[SUPABASE API KEY NOTICE] Key in '{key_name}' was rejected by Supabase SDK: Invalid API key.")
+                else:
+                    logging.error(f"Supabase client initialization failed with {key_name}: {e}")
+                    logging.error(traceback.format_exc())
+
+        print("[SUPABASE CONFIG ERROR] None of the provided API keys were valid Supabase JWT keys.")
+        print("👉 Action Required in Render Environment Variables:")
+        print("   1. Open Supabase Dashboard -> Project Settings -> API")
+        print("   2. Copy the 'anon' public key or 'service_role' secret key (starts with 'eyJ...')")
+        print("   3. Paste into SUPABASE_ANON_KEY or SUPABASE_SERVICE_KEY on Render.")
+
     return None
 
 def test_supabase_connection():
