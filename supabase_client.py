@@ -1,14 +1,14 @@
 import os
 import json
 import logging
+import traceback
 from datetime import datetime
+from dotenv import load_dotenv
 
-# Read credentials only from environment variables
-SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
-SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', '')
-SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', os.environ.get('SUPABASE_KEY', ''))
+# Load .env file if present
+load_dotenv()
 
-# Bucket Mapping
+# Bucket Mapping for Supabase Storage
 BUCKET_MAP = {
     'Drug License': 'store-documents',
     'Food License': 'store-documents',
@@ -26,7 +26,13 @@ BUCKET_MAP = {
     'Other Documents': 'other-documents'
 }
 
-# In-Memory Database Fallback for local unit tests when SUPABASE_URL is not set
+try:
+    from supabase import create_client, Client
+    HAS_SUPABASE_SDK = True
+except ImportError:
+    HAS_SUPABASE_SDK = False
+
+_client_instance = None
 _mock_storage = {
     'users': [],
     'medical_stores': [],
@@ -38,28 +44,59 @@ _mock_storage = {
     'settings': []
 }
 
-try:
-    from supabase import create_client, Client
-    HAS_SUPABASE_SDK = True
-except ImportError:
-    HAS_SUPABASE_SDK = False
-
-_client_instance = None
+def get_supabase_credentials():
+    url = (os.environ.get('SUPABASE_URL') or '').strip().strip('"').strip("'")
+    service_key = (os.environ.get('SUPABASE_SERVICE_KEY') or os.environ.get('SUPABASE_KEY') or '').strip().strip('"').strip("'")
+    anon_key = (os.environ.get('SUPABASE_ANON_KEY') or '').strip().strip('"').strip("'")
+    key_to_use = service_key if service_key else anon_key
+    return url, key_to_use
 
 def get_supabase_client():
+    """
+    Initializes and returns official Supabase Client using SUPABASE_URL and SUPABASE_SERVICE_KEY.
+    """
     global _client_instance
     if _client_instance:
         return _client_instance
 
-    key_to_use = SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY
-    if HAS_SUPABASE_SDK and SUPABASE_URL and key_to_use:
+    url, key_to_use = get_supabase_credentials()
+
+    if not url or not key_to_use:
+        return None
+
+    if HAS_SUPABASE_SDK:
         try:
-            _client_instance = create_client(SUPABASE_URL, key_to_use)
+            _client_instance = create_client(url, key_to_use)
             return _client_instance
         except Exception as e:
             logging.error(f"Supabase client initialization failed: {e}")
+            logging.error(traceback.format_exc())
             return None
     return None
+
+def test_supabase_connection():
+    """
+    Startup connection test to verify Supabase PostgreSQL connection.
+    Logs 'Supabase Connected Successfully' or full exception traceback on failure.
+    """
+    client = get_supabase_client()
+    if not client:
+        msg = "SUPABASE_URL or SUPABASE_SERVICE_KEY not set in environment. Running in offline mode."
+        print(f"[SUPABASE STATUS] {msg}")
+        return False, msg
+
+    try:
+        res = client.table('users').select('*').limit(1).execute()
+        print("Supabase Connected Successfully")
+        logging.info("Supabase Connected Successfully")
+        return True, "Supabase Connected Successfully"
+    except Exception as e:
+        err_msg = f"Supabase Connection Failed: {e}"
+        print(f"[SUPABASE ERROR] {err_msg}")
+        print(traceback.format_exc())
+        logging.error(err_msg)
+        logging.error(traceback.format_exc())
+        return False, err_msg
 
 class SupabaseTableProxy:
     def __init__(self, table_name):
@@ -76,8 +113,8 @@ class SupabaseTableProxy:
                 return res.data
             except Exception as e:
                 logging.error(f"Supabase insert error in {self.table_name}: {e}")
+                logging.error(traceback.format_exc())
 
-        # Fallback in-memory
         if isinstance(data, list):
             _mock_storage[self.table_name].extend(data)
         else:
@@ -92,6 +129,7 @@ class SupabaseTableProxy:
                 return res.data
             except Exception as e:
                 logging.error(f"Supabase upsert error in {self.table_name}: {e}")
+                logging.error(traceback.format_exc())
 
         items = data if isinstance(data, list) else [data]
         for item in items:
@@ -166,8 +204,8 @@ class SupabaseQueryBuilder:
                 return SupabaseResponse(res.data)
             except Exception as e:
                 logging.error(f"Supabase select error in {self.table_name}: {e}")
+                logging.error(traceback.format_exc())
 
-        # In-memory execution
         rows = _mock_storage.get(self.table_name, [])
         filtered = []
         for r in rows:
@@ -212,6 +250,7 @@ class SupabaseUpdateBuilder:
                 return SupabaseResponse(res.data)
             except Exception as e:
                 logging.error(f"Supabase update error in {self.table_name}: {e}")
+                logging.error(traceback.format_exc())
 
         rows = _mock_storage.get(self.table_name, [])
         updated = []
@@ -244,6 +283,7 @@ class SupabaseDeleteBuilder:
                 return SupabaseResponse(res.data)
             except Exception as e:
                 logging.error(f"Supabase delete error in {self.table_name}: {e}")
+                logging.error(traceback.format_exc())
 
         rows = _mock_storage.get(self.table_name, [])
         new_rows = []
@@ -268,7 +308,7 @@ def db_table(table_name):
 
 def upload_to_supabase_storage(file_obj, filename, category="Other Documents"):
     """
-    Uploads a document to the designated Supabase Storage Bucket:
+    Uploads a document to designated Supabase Storage Bucket:
     - store-documents
     - owner-documents
     - pharmacist-documents
@@ -277,7 +317,6 @@ def upload_to_supabase_storage(file_obj, filename, category="Other Documents"):
     """
     bucket_name = BUCKET_MAP.get(category, 'other-documents')
     client = get_supabase_client()
-    
     file_path = f"{category}/{filename}"
 
     if client:
@@ -302,9 +341,10 @@ def upload_to_supabase_storage(file_obj, filename, category="Other Documents"):
             }
         except Exception as e:
             logging.error(f"Supabase Storage upload error for bucket {bucket_name}: {e}")
+            logging.error(traceback.format_exc())
 
-    # Fallback Supabase Storage URL format
-    base_url = SUPABASE_URL if SUPABASE_URL else "https://your-project.supabase.co"
+    url, _ = get_supabase_credentials()
+    base_url = url if url else "https://your-project.supabase.co"
     return {
         'success': True,
         'url': f"{base_url}/storage/v1/object/public/{bucket_name}/{file_path}",

@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timedelta
 from database import init_db
-from supabase_client import db_table, _mock_storage
+from supabase_client import db_table
 
 STORE_PREFIXES = [
     "Sai", "Shree", "Mahavir", "Boishar Welfare", "Apollo", "MedPlus", "Sanjivani", 
@@ -45,10 +45,6 @@ QUALIFICATIONS = ["B.Pharm", "D.Pharm", "M.Pharm", "Pharm.D"]
 
 def generate_seed_data():
     init_db()
-    
-    # Clear mock storage or tables
-    for tbl in ['medical_stores', 'pharmacists', 'documents', 'notifications', 'renewals', 'activity_logs', 'users']:
-        _mock_storage[tbl] = []
 
     now = datetime.now()
     now_str = now.strftime('%Y-%m-%d %H:%M:%S')

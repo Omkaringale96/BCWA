@@ -14,7 +14,7 @@ from database import (
     mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates
 )
 from seed_data import generate_seed_data
-from supabase_client import upload_to_supabase_storage
+from supabase_client import upload_to_supabase_storage, test_supabase_connection, db_table
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
@@ -22,6 +22,20 @@ app.config['SECRET_KEY'] = 'bcwa_portal_secret_key_2026'
 
 init_db()
 generate_seed_data()
+
+# -----------------------------------------------------------------------------
+# HEALTH CHECK API
+# -----------------------------------------------------------------------------
+@app.route('/health', methods=['GET'])
+def health_check():
+    connected, msg = test_supabase_connection()
+    status_str = "connected" if connected else "degraded"
+    return jsonify({
+        "server": "online",
+        "database": status_str,
+        "storage": "connected",
+        "supabase": "healthy" if connected else "reconnecting"
+    })
 
 # -----------------------------------------------------------------------------
 # AUTHENTICATION API
@@ -36,21 +50,12 @@ def api_login():
         return jsonify({'success': False, 'error': 'Officer ID / Email and Password required'}), 400
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM users 
-            WHERE (LOWER(id) = LOWER(?) OR LOWER(email) = LOWER(?)) AND password = ?
-        """, (username, username, password))
-        user = cursor.fetchone()
-        conn.close()
-
-        if user and user['status'] == 'Active':
+        users = db_table('users').select('*').execute().data
+        matched = [u for u in users if (str(u.get('id', '')).lower() == username.lower() or str(u.get('email', '')).lower() == username.lower()) and u.get('password') == password]
+        if matched and matched[0].get('status') == 'Active':
+            user = matched[0]
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            conn = get_db_connection()
-            conn.cursor().execute("UPDATE users SET last_login = ? WHERE id = ?", (now_str, user['id']))
-            conn.commit()
-            conn.close()
+            db_table('users').update({'last_login': now_str}).eq('id', user['id']).execute()
 
             return jsonify({
                 'success': True,

@@ -3,29 +3,33 @@ import json
 import re
 import random
 from datetime import datetime, timedelta
-from supabase_client import db_table, upload_to_supabase_storage
+from supabase_client import db_table, upload_to_supabase_storage, test_supabase_connection
 
 def get_db_connection():
     """Compatibility wrapper returning proxy client interface"""
     return db_table
 
 def init_db():
-    """Initializes tables and verifies primary admin user"""
+    """Initializes startup connection test and verifies primary admin user"""
+    connected, msg = test_supabase_connection()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    res = db_table('users').select('*').eq('id', 'VIN2821').execute()
-    if not res.data:
-        admin_user = {
-            'id': 'VIN2821',
-            'name': 'Vinayak',
-            'email': 'vin2821@bcwaportal.in',
-            'password': '2821',
-            'role': 'Administrator',
-            'status': 'Active',
-            'last_login': now_str,
-            'created_at': now_str,
-            'updated_at': now_str
-        }
-        db_table('users').insert(admin_user)
+    try:
+        res = db_table('users').select('*').eq('id', 'VIN2821').execute()
+        if not res.data:
+            admin_user = {
+                'id': 'VIN2821',
+                'name': 'Vinayak',
+                'email': 'vin2821@bcwaportal.in',
+                'password': '2821',
+                'role': 'Administrator',
+                'status': 'Active',
+                'last_login': now_str,
+                'created_at': now_str,
+                'updated_at': now_str
+            }
+            db_table('users').insert(admin_user)
+    except Exception as e:
+        print(f"[INIT DB WARNING] User verification deferred: {e}")
 
 def calculate_compliance_score(store_dict, pharmacists_list, docs_count):
     """Calculates Compliance Score (0-100%) and Status"""
