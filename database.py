@@ -5,6 +5,12 @@ import re
 from datetime import datetime, timedelta
 import random
 
+try:
+    from cloud_services import sync_to_firestore, upload_document_to_cloudinary
+except ImportError:
+    sync_to_firestore = None
+    upload_document_to_cloudinary = None
+
 DB_FILE = os.path.join(os.path.dirname(__file__), 'bcwa_portal.db')
 
 def get_db_connection():
@@ -513,6 +519,13 @@ def save_medical_store(data):
 
     conn.commit()
     conn.close()
+
+    if sync_to_firestore:
+        try:
+            sync_to_firestore('medical_stores', store_id, updated_store)
+        except Exception:
+            pass
+
     return {'id': store_id, 'shop_code': shop_code, 'warnings': dups}
 
 def delete_medical_store(store_id):
@@ -615,6 +628,13 @@ def save_pharmacist(data):
 
     conn.commit()
     conn.close()
+
+    if sync_to_firestore:
+        try:
+            sync_to_firestore('pharmacists', ph_id, data)
+        except Exception:
+            pass
+
     return {'id': ph_id, 'warnings': dups}
 
 def transfer_pharmacist(pharmacist_id, new_store_id, joining_date=None):

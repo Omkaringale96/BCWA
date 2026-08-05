@@ -14,6 +14,11 @@ from database import (
     mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates
 )
 from seed_data import generate_seed_data
+try:
+    from cloud_services import upload_document_to_cloudinary, sync_to_firestore
+except ImportError:
+    upload_document_to_cloudinary = None
+    sync_to_firestore = None
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
@@ -250,21 +255,31 @@ def api_upload_document():
     file = request.files.get('file')
 
     file_name = file.filename if file else 'document.pdf'
-    size_kb = int(len(file.read()) / 1024) if file else random.randint(150, 800)
+    
+    file_url = f"/static/docs/{file_name}"
+    size_kb = random.randint(150, 800)
+
+    if file and upload_document_to_cloudinary:
+        file_bytes = file.read()
+        size_kb = max(1, int(len(file_bytes) / 1024))
+        file.seek(0)
+        c_res = upload_document_to_cloudinary(file, file_name, folder_category=category)
+        if c_res.get('success'):
+            file_url = c_res.get('url')
 
     doc_data = {
         'store_id': store_id,
         'category': category,
         'title': title,
         'file_name': file_name,
-        'file_url': f"/static/docs/{file_name}",
+        'file_url': file_url,
         'file_size_kb': size_kb,
         'issue_date': issue_date,
         'expiry_date': expiry_date
     }
 
     res = save_document(doc_data)
-    return jsonify({'success': True, 'id': res['id'], 'quality_status': res['quality_status'], 'quality_notes': res['quality_notes']})
+    return jsonify({'success': True, 'id': res['id'], 'file_url': file_url, 'quality_status': res['quality_status'], 'quality_notes': res['quality_notes']})
 
 @app.route('/api/documents/<doc_id>', methods=['DELETE'])
 def api_delete_document(doc_id):
