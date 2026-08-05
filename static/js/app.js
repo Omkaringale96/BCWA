@@ -39,9 +39,8 @@ const BCWAApp = {
             await fetch('/api/auth/timeout', { method: 'POST' });
         } catch (e) {}
         
-        localStorage.removeItem('bcwa_user');
         this.currentUser = null;
-        this.showLoginScreen('Your session expired due to inactivity.');
+        this.showLoginScreen('Session expired due to inactivity.');
     },
 
     preventBackNavigation() {
@@ -80,7 +79,6 @@ const BCWAApp = {
 
                 if (res.ok && data.success) {
                     this.currentUser = data.user;
-                    localStorage.setItem('bcwa_user', JSON.stringify(data.user));
                     this.renderAuthenticatedUI();
                     return;
                 } else if (alertBox) {
@@ -104,27 +102,19 @@ const BCWAApp = {
     async checkAuth() {
         try {
             const res = await fetch('/api/auth/session');
-            if (res.ok) {
-                const data = await res.json();
-                if (data.authenticated && data.user) {
-                    this.currentUser = data.user;
-                    localStorage.setItem('bcwa_user', JSON.stringify(data.user));
-                    this.renderAuthenticatedUI();
-                    return;
-                }
+            const data = await res.json();
+            if (res.ok && data.authenticated && data.user) {
+                this.currentUser = data.user;
+                this.renderAuthenticatedUI();
+                return;
+            } else if (data && data.reason === 'timeout') {
+                this.currentUser = null;
+                this.showLoginScreen('Session expired due to inactivity.');
+                return;
             }
         } catch (e) {}
 
-        const stored = localStorage.getItem('bcwa_user');
-        if (stored) {
-            try {
-                this.currentUser = JSON.parse(stored);
-                this.renderAuthenticatedUI();
-                return;
-            } catch (e) {
-                localStorage.removeItem('bcwa_user');
-            }
-        }
+        this.currentUser = null;
         this.showLoginScreen();
     },
 
@@ -133,7 +123,6 @@ const BCWAApp = {
         try {
             await fetch('/api/auth/logout', { method: 'POST' });
         } catch (e) {}
-        localStorage.removeItem('bcwa_user');
         this.currentUser = null;
         this.showLoginScreen();
     },
@@ -178,11 +167,6 @@ const BCWAApp = {
         lucide.createIcons();
     },
 
-    logout() {
-        localStorage.removeItem('bcwa_user');
-        this.currentUser = null;
-        this.showLoginScreen();
-    },
 
     // -------------------------------------------------------------------------
     // NAVIGATION & TAB ROUTING (STRICTLY 8 PANES)

@@ -115,6 +115,30 @@ class BCWAPortalTestCase(unittest.TestCase):
         self.assertEqual(res_sess_after.status_code, 401)
         print("Session Management Test Passed.")
 
+    def test_deployment_invalidation(self):
+        from app import reset_login_lockout
+        import app as app_module
+        reset_login_lockout('127.0.0.1')
+
+        # Login
+        self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
+        
+        # Verify authenticated
+        res1 = self.app.get('/api/auth/session')
+        self.assertEqual(res1.status_code, 200)
+
+        # Simulate Server Restart / Deployment (change SERVER_STARTUP_ID)
+        old_id = app_module.SERVER_STARTUP_ID
+        app_module.SERVER_STARTUP_ID = "new_deployment_startup_id_999"
+
+        # Verify session is now automatically invalidated!
+        res2 = self.app.get('/api/auth/session')
+        self.assertEqual(res2.status_code, 401)
+        
+        # Restore for other tests
+        app_module.SERVER_STARTUP_ID = old_id
+        print("Deployment Invalidation Test Passed.")
+
 if __name__ == '__main__':
     unittest.main()
 

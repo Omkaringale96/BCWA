@@ -22,6 +22,9 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config.from_object(get_config())
 CORS(app, supports_credentials=True)
 
+import uuid
+SERVER_STARTUP_ID = uuid.uuid4().hex
+
 init_db()
 generate_seed_data()
 
@@ -63,17 +66,30 @@ def audit_security_log(action, details, user_name="System"):
     full_details = f"{details} | IP: {ip} | User-Agent: {user_agent}"
     log_activity(user_name=user_name, action=action, details=full_details)
 
+def is_session_valid():
+    user = session.get('user')
+    startup_id = session.get('server_startup_id')
+    if not user or not startup_id:
+        return False
+    if startup_id != SERVER_STARTUP_ID:
+        user_name = user.get('name', 'Officer')
+        audit_security_log("Deployment Invalidation", f"Session invalidated due to server deployment/restart for '{user_name}'.", user_name=user_name)
+        session.clear()
+        return False
+    return True
+
 # -----------------------------------------------------------------------------
 # EXTRA SECURITY HEADERS & NO-CACHE
 # -----------------------------------------------------------------------------
 @app.after_request
 def apply_security_headers(response):
-    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     response.headers['Content-Security-Policy'] = "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval';"
     return response
 
@@ -88,7 +104,8 @@ def health_check():
         "server": "online",
         "database": status_str,
         "storage": "connected",
-        "supabase": "healthy" if connected else "reconnecting"
+        "supabase": "healthy" if connected else "reconnecting",
+        "startup_id": SERVER_STARTUP_ID
     })
 
 # -----------------------------------------------------------------------------
@@ -132,7 +149,7 @@ def api_login():
     if user_found:
         reset_login_lockout(ip)
         
-        # Regenerate session to prevent session fixation
+        # Regenerate session to prevent session fixation & bind to SERVER_STARTUP_ID
         session.clear()
         session.permanent = True
         
@@ -145,6 +162,8 @@ def api_login():
             'status': user_found['status']
         }
         session['user'] = user_payload
+        session['server_startup_id'] = SERVER_STARTUP_ID
+        session['last_activity'] = datetime.now().isoformat()
         
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         try:
@@ -182,9 +201,23 @@ def api_session_timeout():
 
 @app.route('/api/auth/session', methods=['GET'])
 def api_check_session():
-    user = session.get('user')
-    if user:
-        return jsonify({'authenticated': True, 'user': user})
+    if is_session_valid():
+        last_act_str = session.get('last_activity')
+        if last_act_str:
+            try:
+                last_act = datetime.fromisoformat(last_act_str)
+                if (datetime.now() - last_act).total_seconds() > 60:
+                    user = session.get('user', {})
+                    user_name = user.get('name', 'Officer')
+                    audit_security_log("Session Timeout", f"Server-side session expired due to 60s inactivity for '{user_name}'.", user_name=user_name)
+                    session.clear()
+                    return jsonify({'authenticated': False, 'reason': 'timeout'}), 401
+            except Exception:
+                pass
+        
+        session['last_activity'] = datetime.now().isoformat()
+        return jsonify({'authenticated': True, 'user': session['user']})
+    
     return jsonify({'authenticated': False}), 401
 
 @app.route('/api/ocr/extract', methods=['POST'])
