@@ -9,6 +9,23 @@ def get_db_connection():
     """Compatibility wrapper returning proxy client interface"""
     return db_table
 
+_CACHE = {}
+_CACHE_TTL = 300  # 5 minutes TTL
+
+def cache_get(key):
+    if key in _CACHE:
+        val, ts = _CACHE[key]
+        if (datetime.now() - ts).total_seconds() < _CACHE_TTL:
+            return val
+        del _CACHE[key]
+    return None
+
+def cache_set(key, val):
+    _CACHE[key] = (val, datetime.now())
+
+def cache_clear():
+    _CACHE.clear()
+
 def init_db():
     """Initializes startup connection test and verifies primary admin user"""
     connected, msg = test_supabase_connection()
@@ -125,15 +142,19 @@ def check_duplicates(dl_20b=None, dl_21b=None, fssai=None, ppp=None, mspc=None, 
     return warnings
 
 def get_dashboard_stats():
+    cached = cache_get('dashboard_stats')
+    if cached:
+        return cached
+
     today = datetime.now().date()
     d90 = (today + timedelta(days=90)).strftime('%Y-%m-%d')
     today_str = today.strftime('%Y-%m-%d')
 
-    stores = db_table('medical_stores').select('*').execute().data
-    pharmacists = db_table('pharmacists').select('*').execute().data
-    documents = db_table('documents').select('*').execute().data
-    notifications = db_table('notifications').select('*').execute().data
-    activity = db_table('activity_logs').select('*').order('created_at', desc=True).limit(10).execute().data
+    stores = db_table('medical_stores').select('*').execute().data or []
+    pharmacists = db_table('pharmacists').select('*').execute().data or []
+    documents = db_table('documents').select('*').execute().data or []
+    notifications = db_table('notifications').select('*').execute().data or []
+    activity = db_table('activity_logs').select('*').order('created_at', desc=True).limit(10).execute().data or []
 
     total_stores = len(stores)
     total_pharmacists = len(pharmacists)
@@ -157,7 +178,6 @@ def get_dashboard_stats():
 
     recent_stores = stores[:5] if len(stores) >= 5 else stores
 
-    # Fetch notification_logs & notification_queue stats
     try:
         notif_logs = db_table('notification_logs').select('*').execute().data or []
         notif_queue = db_table('notification_queue').select('*').execute().data or []
@@ -175,7 +195,7 @@ def get_dashboard_stats():
         failed_emails = 0
         last_run = 'Never'
 
-    return {
+    res = {
         'total_stores': total_stores,
         'total_pharmacists': total_pharmacists,
         'dl_expiring': dl_expiring,
@@ -192,6 +212,8 @@ def get_dashboard_stats():
         'recent_activity': activity,
         'recent_stores': recent_stores
     }
+    cache_set('dashboard_stats', res)
+    return res
 
 def get_notification_queue(status=None, limit=100):
     try:
@@ -209,11 +231,24 @@ def get_notification_queue_item_by_id(queue_id):
     except Exception:
         return None
 
-def get_notification_logs(limit=100):
+def get_notification_logs(page=None, limit=25):
     try:
-        return db_table('notification_logs').select('*').order('sent_at', desc=True).limit(limit).execute().data or []
+        logs = db_table('notification_logs').select('*').order('sent_at', desc=True).execute().data or []
+        if page is not None:
+            total = len(logs)
+            pages = (total + limit - 1) // limit if total > 0 else 1
+            items = logs[(page - 1) * limit : page * limit]
+            return {
+                'items': items,
+                'logs': items,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'pages': pages
+            }
+        return logs[:limit]
     except Exception:
-        return []
+        return [] if page is None else {'items': [], 'logs': [], 'total': 0, 'page': 1, 'limit': limit, 'pages': 1}
 
 def get_notification_log_by_id(log_id):
     try:
@@ -258,9 +293,9 @@ def resend_notification_log(log_id):
 
     return ok, err_msg
 
-def get_medical_stores(query=None, compliance=None, status=None, limit=100, offset=0):
-    stores = db_table('medical_stores').select('*').order('created_at', desc=True).limit(limit).execute().data
-    pharmacists = db_table('pharmacists').select('*').execute().data
+def get_medical_stores(query=None, compliance=None, status=None, page=None, limit=25):
+    stores = db_table('medical_stores').select('*').order('created_at', desc=True).execute().data or []
+    pharmacists = db_table('pharmacists').select('*').execute().data or []
 
     result = []
     for s in stores:
@@ -289,6 +324,19 @@ def get_medical_stores(query=None, compliance=None, status=None, limit=100, offs
                 continue
 
         result.append(s_copy)
+
+    if page is not None:
+        total = len(result)
+        pages = (total + limit - 1) // limit if total > 0 else 1
+        items = result[(page - 1) * limit : page * limit]
+        return {
+            'items': items,
+            'stores': items,
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'pages': pages
+        }
 
     return result
 
@@ -388,9 +436,9 @@ def delete_medical_store(store_id):
     log_activity("Administrator", "Store Deleted", f"Deleted Medical Store: {name}", store_id)
     return True
 
-def get_pharmacists(query=None, store_id=None, limit=100):
-    pharmacists = db_table('pharmacists').select('*').order('created_at', desc=True).limit(limit).execute().data
-    stores = db_table('medical_stores').select('*').execute().data
+def get_pharmacists(query=None, store_id=None, page=None, limit=25):
+    pharmacists = db_table('pharmacists').select('*').order('created_at', desc=True).execute().data or []
+    stores = db_table('medical_stores').select('id, store_name, shop_code').execute().data or []
     store_map = {s['id']: s for s in stores}
 
     result = []
@@ -416,6 +464,19 @@ def get_pharmacists(query=None, store_id=None, limit=100):
                 continue
 
         result.append(p_copy)
+
+    if page is not None:
+        total = len(result)
+        pages = (total + limit - 1) // limit if total > 0 else 1
+        items = result[(page - 1) * limit : page * limit]
+        return {
+            'items': items,
+            'pharmacists': items,
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'pages': pages
+        }
 
     return result
 
@@ -498,9 +559,9 @@ def delete_pharmacist(pharmacist_id):
     log_activity("Office Staff", "Pharmacist Deleted", f"Deleted Pharmacist record: {name}", store_id)
     return True
 
-def get_documents(store_id=None, category=None):
-    docs = db_table('documents').select('*').order('created_at', desc=True).execute().data
-    stores = db_table('medical_stores').select('id, store_name').execute().data
+def get_documents(store_id=None, category=None, query=None, page=None, limit=25):
+    docs = db_table('documents').select('*').order('created_at', desc=True).execute().data or []
+    stores = db_table('medical_stores').select('id, store_name').execute().data or []
     store_map = {s['id']: s['store_name'] for s in stores}
 
     result = []
@@ -512,7 +573,32 @@ def get_documents(store_id=None, category=None):
 
         d_copy = dict(d)
         d_copy['store_name'] = store_map.get(d.get('store_id'), 'System Doc')
+
+        if query:
+            q = query.strip().lower()
+            match = (
+                q in d_copy.get('title', '').lower() or
+                q in d_copy.get('file_name', '').lower() or
+                q in d_copy.get('category', '').lower() or
+                q in d_copy.get('store_name', '').lower()
+            )
+            if not match:
+                continue
+
         result.append(d_copy)
+
+    if page is not None:
+        total = len(result)
+        pages = (total + limit - 1) // limit if total > 0 else 1
+        items = result[(page - 1) * limit : page * limit]
+        return {
+            'items': items,
+            'documents': items,
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'pages': pages
+        }
 
     return result
 
@@ -616,9 +702,22 @@ def mark_notification_read(notif_id):
     db_table('notifications').update({'is_read': True}).eq('id', notif_id).execute()
     return True
 
-def get_activity_logs(limit=100):
-    res = db_table('activity_logs').select('*').order('created_at', desc=True).limit(limit).execute()
-    return res.data
+def get_activity_logs(page=None, limit=25):
+    res = db_table('activity_logs').select('*').order('created_at', desc=True).execute()
+    data = res.data or []
+    if page is not None:
+        total = len(data)
+        pages = (total + limit - 1) // limit if total > 0 else 1
+        items = data[(page - 1) * limit : page * limit]
+        return {
+            'items': items,
+            'logs': items,
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'pages': pages
+        }
+    return data[:limit]
 
 def log_activity(user_name, action, details, store_id=None):
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

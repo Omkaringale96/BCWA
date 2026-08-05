@@ -305,24 +305,70 @@ const BCWAApp = {
         }
     },
 
-    async loadMedicalStores(query = '') {
+    pages: {
+        stores: 1,
+        pharmacists: 1,
+        documents: 1,
+        notifications: 1,
+        activity: 1
+    },
+
+    renderPagination(containerId, moduleName, page, totalPages, totalItems) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        if (!totalPages || totalPages <= 1) {
+            container.innerHTML = `<div class="text-secondary text-end" style="font-size:12px; padding:6px 0;">Showing ${totalItems} records</div>`;
+            return;
+        }
+        container.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center w-100 py-2" style="font-size:13px;">
+                <div class="text-secondary">
+                    Page <strong>${page}</strong> of <strong>${totalPages}</strong> (${totalItems} total)
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-secondary ${page <= 1 ? 'disabled' : ''}" ${page <= 1 ? 'disabled' : ''} onclick="BCWAApp.changePage('${moduleName}', ${page - 1})">
+                        <i data-lucide="chevron-left"></i> Prev
+                    </button>
+                    <button class="btn btn-secondary ${page >= totalPages ? 'disabled' : ''}" ${page >= totalPages ? 'disabled' : ''} onclick="BCWAApp.changePage('${moduleName}', ${page + 1})">
+                        Next <i data-lucide="chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+        lucide.createIcons();
+    },
+
+    changePage(moduleName, newPage) {
+        if (newPage < 1) return;
+        this.pages[moduleName] = newPage;
+        if (moduleName === 'stores') this.loadMedicalStores('', newPage);
+        else if (moduleName === 'pharmacists') this.loadPharmacists('', newPage);
+        else if (moduleName === 'documents') this.loadDocumentVault('All', newPage);
+        else if (moduleName === 'notifications') this.loadNotifications(newPage);
+        else if (moduleName === 'activity') this.loadActivityLogs(newPage);
+    },
+
+    async loadMedicalStores(query = '', page = 1) {
         try {
+            this.pages.stores = page;
             const comp = document.getElementById('filter-store-compliance')?.value || '';
             const status = document.getElementById('filter-store-status')?.value || '';
 
-            const res = await fetch(`/api/stores?query=${encodeURIComponent(query)}&compliance=${comp}&status=${status}`);
+            const res = await fetch(`/api/stores?query=${encodeURIComponent(query)}&compliance=${comp}&status=${status}&page=${page}&limit=25`);
             const data = await res.json();
-            this.storesCache = data.stores;
+            const storeItems = data.items || data.stores || [];
+            this.storesCache = storeItems;
 
             const tbody = document.querySelector('#table-medical-stores tbody');
             if (!tbody) return;
 
-            if (data.stores.length === 0) {
+            if (storeItems.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="7" class="text-center text-secondary py-4">No matching Medical Stores found.</td></tr>`;
+                this.renderPagination('pagination-medical-stores', 'stores', 1, 1, 0);
                 return;
             }
 
-            tbody.innerHTML = data.stores.map(st => {
+            tbody.innerHTML = storeItems.map(st => {
                 const badgeClass = st.compliance_score >= 90 ? 'badge-success' : (st.compliance_score >= 75 ? 'badge-info' : (st.compliance_score >= 50 ? 'badge-warning' : 'badge-danger'));
                 return `
                     <tr>
@@ -356,27 +402,34 @@ const BCWAApp = {
                 `;
             }).join('');
 
+            if (data.pages) {
+                this.renderPagination('pagination-medical-stores', 'stores', page, data.pages, data.total);
+            }
+
             lucide.createIcons();
         } catch (err) {
             console.error('Error loading medical stores:', err);
         }
     },
 
-    async loadPharmacists(query = '') {
+    async loadPharmacists(query = '', page = 1) {
         try {
-            const res = await fetch(`/api/pharmacists?query=${encodeURIComponent(query)}`);
+            this.pages.pharmacists = page;
+            const res = await fetch(`/api/pharmacists?query=${encodeURIComponent(query)}&page=${page}&limit=25`);
             const data = await res.json();
-            this.pharmacistsCache = data.pharmacists;
+            const phItems = data.items || data.pharmacists || [];
+            this.pharmacistsCache = phItems;
 
             const tbody = document.querySelector('#table-pharmacists tbody');
             if (!tbody) return;
 
-            if (data.pharmacists.length === 0) {
+            if (phItems.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="7" class="text-center text-secondary py-4">No registered Pharmacists found.</td></tr>`;
+                this.renderPagination('pagination-pharmacists', 'pharmacists', 1, 1, 0);
                 return;
             }
 
-            tbody.innerHTML = data.pharmacists.map(ph => `
+            tbody.innerHTML = phItems.map(ph => `
                 <tr>
                     <td>
                         <strong>${ph.full_name}</strong>
@@ -397,30 +450,39 @@ const BCWAApp = {
                 </tr>
             `).join('');
 
+            if (data.pages) {
+                this.renderPagination('pagination-pharmacists', 'pharmacists', page, data.pages, data.total);
+            }
+
             lucide.createIcons();
         } catch (err) {
             console.error('Error loading pharmacists:', err);
         }
     },
 
-    async loadDocumentVault(category = 'All') {
+    async loadDocumentVault(category = 'All', page = 1) {
         try {
+            this.pages.documents = page;
             const catParam = category === 'All' ? '' : category;
-            const res = await fetch(`/api/documents?category=${encodeURIComponent(catParam)}`);
+            const res = await fetch(`/api/documents?category=${encodeURIComponent(catParam)}&page=${page}&limit=25`);
             const data = await res.json();
+            const docItems = data.items || data.documents || [];
 
-            document.getElementById('vault-current-category').textContent = category === 'All' ? 'All Document Categories' : category;
-            document.getElementById('vault-doc-count').textContent = `${data.documents.length} files`;
+            const catEl = document.getElementById('vault-current-category');
+            const countEl = document.getElementById('vault-doc-count');
+            if (catEl) catEl.textContent = category === 'All' ? 'All Document Categories' : category;
+            if (countEl) countEl.textContent = `${data.total || docItems.length} files`;
 
             const tbody = document.querySelector('#table-documents tbody');
             if (!tbody) return;
 
-            if (data.documents.length === 0) {
+            if (docItems.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="6" class="text-center text-secondary py-4">No documents found in folder.</td></tr>`;
+                this.renderPagination('pagination-documents', 'documents', 1, 1, 0);
                 return;
             }
 
-            tbody.innerHTML = data.documents.map(doc => `
+            tbody.innerHTML = docItems.map(doc => `
                 <tr>
                     <td>
                         <strong>${doc.title}</strong>
@@ -440,6 +502,10 @@ const BCWAApp = {
                     </td>
                 </tr>
             `).join('');
+
+            if (data.pages) {
+                this.renderPagination('pagination-documents', 'documents', page, data.pages, data.total);
+            }
 
             lucide.createIcons();
         } catch (err) {
@@ -477,30 +543,43 @@ const BCWAApp = {
         }
     },
 
-    async loadNotifications() {
+    async loadNotifications(page = 1) {
         try {
-            const res = await fetch('/api/notifications');
-            const data = await res.json();
-            const container = document.getElementById('notifications-list');
+            this.pages.notifications = page;
+            const [notifRes, qRes, logRes] = await Promise.all([
+                fetch('/api/notifications'),
+                fetch('/api/notifications/queue'),
+                fetch(`/api/notifications/logs?page=${page}&limit=25`)
+            ]);
 
+            if (notifRes.status === 401 || logRes.status === 401) return;
+
+            const [data, qData, logData] = await Promise.all([
+                notifRes.json(),
+                qRes.json(),
+                logRes.json()
+            ]);
+
+            const container = document.getElementById('notifications-list');
             if (container && data.notifications) {
-                container.innerHTML = data.notifications.map(n => `
-                    <div class="notif-item card mb-2 p-3" style="border-left: 4px solid ${n.type === 'Danger' ? '#EF4444' : '#F59E0B'}; display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <strong>${n.title}</strong>
-                            <p class="text-secondary" style="font-size:12px; margin-top:2px;">${n.message}</p>
-                            <small class="text-muted">${n.created_at}</small>
+                if (data.notifications.length === 0) {
+                    container.innerHTML = `<div class="text-center text-muted p-3">No unread notifications.</div>`;
+                } else {
+                    container.innerHTML = data.notifications.slice(0, 20).map(n => `
+                        <div class="notif-item card mb-2 p-3" style="border-left: 4px solid ${n.type === 'Danger' ? '#EF4444' : '#F59E0B'}; display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <strong>${n.title}</strong>
+                                <p class="text-secondary" style="font-size:12px; margin-top:2px;">${n.message}</p>
+                                <small class="text-muted">${n.created_at}</small>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="BCWAApp.markRead('${n.id}')">Dismiss</button>
                         </div>
-                        <button class="btn btn-secondary btn-sm" onclick="BCWAApp.markRead('${n.id}')">Dismiss</button>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
 
             // Fetch Notification Queue Items
-            const qRes = await fetch('/api/notifications/queue');
-            const qData = await qRes.json();
             const qTbody = document.querySelector('#table-notification-queue tbody');
-
             if (qTbody && qData.queue) {
                 if (qData.queue.length === 0) {
                     qTbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted p-3">Queue is empty. All reminder emails processed.</td></tr>';
@@ -523,27 +602,33 @@ const BCWAApp = {
             }
 
             // Fetch Automated Email Notification Dispatch Logs
-            const logRes = await fetch('/api/notifications/logs');
-            if (logRes.status === 401) return;
-            const logData = await logRes.json();
             const logTbody = document.querySelector('#table-notification-logs tbody');
+            const logsList = logData.logs || logData.items || [];
+            if (logTbody) {
+                if (logsList.length === 0) {
+                    logTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted p-3">No notification logs recorded.</td></tr>';
+                    this.renderPagination('pagination-notification-logs', 'notifications', 1, 1, 0);
+                } else {
+                    logTbody.innerHTML = logsList.map(l => `
+                        <tr>
+                            <td><code>${l.id}</code></td>
+                            <td><strong>${l.recipient_name}</strong><br><small class="text-muted">${l.recipient_email}</small></td>
+                            <td><span class="badge badge-info">${l.document_type}</span></td>
+                            <td><strong>${l.days_remaining} Days</strong></td>
+                            <td><span class="badge ${l.delivery_status === 'Success' ? 'badge-success' : 'badge-danger'}">${l.delivery_status}</span></td>
+                            <td><small class="text-muted">${l.sent_at}</small></td>
+                            <td>
+                                <button class="btn btn-secondary btn-sm me-1" onclick="BCWAApp.resendEmailNotice('${l.id}')" title="Resend Email"><i data-lucide="send"></i> Resend</button>
+                                <button class="btn btn-secondary btn-sm me-1" onclick="window.open('/api/notifications/logs/${l.id}/preview', '_blank')" title="Preview Email HTML"><i data-lucide="eye"></i> Preview</button>
+                                <button class="btn btn-secondary btn-sm" onclick="window.open('/api/notifications/logs/${l.id}/pdf', '_blank')" title="Download PDF Notice"><i data-lucide="download"></i> PDF</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            }
 
-            if (logTbody && logData.logs) {
-                logTbody.innerHTML = logData.logs.map(l => `
-                    <tr>
-                        <td><code>${l.id}</code></td>
-                        <td><strong>${l.recipient_name}</strong><br><small class="text-muted">${l.recipient_email}</small></td>
-                        <td><span class="badge badge-info">${l.document_type}</span></td>
-                        <td><strong>${l.days_remaining} Days</strong></td>
-                        <td><span class="badge ${l.delivery_status === 'Success' ? 'badge-success' : 'badge-danger'}">${l.delivery_status}</span></td>
-                        <td><small class="text-muted">${l.sent_at}</small></td>
-                        <td>
-                            <button class="btn btn-secondary btn-sm me-1" onclick="BCWAApp.resendEmailNotice('${l.id}')" title="Resend Email"><i data-lucide="send"></i> Resend</button>
-                            <button class="btn btn-secondary btn-sm me-1" onclick="window.open('/api/notifications/logs/${l.id}/preview', '_blank')" title="Preview Email HTML"><i data-lucide="eye"></i> Preview</button>
-                            <button class="btn btn-secondary btn-sm" onclick="window.open('/api/notifications/logs/${l.id}/pdf', '_blank')" title="Download PDF Notice"><i data-lucide="download"></i> PDF</button>
-                        </td>
-                    </tr>
-                `).join('');
+            if (logData.pages) {
+                this.renderPagination('pagination-notification-logs', 'notifications', page, logData.pages, logData.total);
             }
 
             lucide.createIcons();
@@ -637,7 +722,7 @@ const BCWAApp = {
 
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '<i data-lucide="mail-check"></i> <span>Send Test Email</span>';
+            btn.innerHTML = '<i data-lucide="send"></i> Send Test Email';
             lucide.createIcons();
         }
     },
@@ -647,22 +732,37 @@ const BCWAApp = {
         this.loadNotifications();
     },
 
-    async loadActivityLogs() {
+    async loadActivityLogs(page = 1) {
         try {
-            const res = await fetch('/api/activity-logs');
+            this.pages.activity = page;
+            const res = await fetch(`/api/activity-logs?page=${page}&limit=25`);
             const data = await res.json();
+            const logItems = data.items || data.logs || [];
             const tbody = document.querySelector('#table-activity-logs tbody');
 
             if (!tbody) return;
 
-            tbody.innerHTML = data.logs.map(log => `
+            if (logItems.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-secondary py-4">No activity logs recorded.</td></tr>`;
+                this.renderPagination('pagination-activity-logs', 'activity', 1, 1, 0);
+                return;
+            }
+
+            tbody.innerHTML = logItems.map(log => `
                 <tr>
-                    <td><code>${log.created_at}</code></td>
+                    <td><code>${log.id || log.created_at}</code></td>
                     <td><strong>${log.user_name}</strong></td>
                     <td><span class="badge badge-info">${log.action}</span></td>
                     <td>${log.details}</td>
+                    <td><small class="text-muted">${log.created_at}</small></td>
                 </tr>
             `).join('');
+
+            if (data.pages) {
+                this.renderPagination('pagination-activity-logs', 'activity', page, data.pages, data.total);
+            }
+
+            lucide.createIcons();
         } catch (err) {
             console.error('Error loading activity logs:', err);
         }

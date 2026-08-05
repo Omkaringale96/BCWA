@@ -33,6 +33,33 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config.from_object(get_config())
 CORS(app, supports_credentials=True)
 
+import gzip
+
+@app.after_request
+def compress_response(response):
+    accept_encoding = request.headers.get('Accept-Encoding', '')
+    if (response.status_code == 200 and 
+        'gzip' in accept_encoding.lower() and 
+        'Content-Encoding' not in response.headers and
+        response.content_type.startswith(('application/json', 'text/html', 'text/css', 'application/javascript'))):
+        
+        try:
+            response.direct_passthrough = False
+            gzip_buffer = io.BytesIO()
+            with gzip.GzipFile(mode='wb', fileobj=gzip_buffer) as gz:
+                gz.write(response.get_data())
+            
+            compressed = gzip_buffer.getvalue()
+            if len(compressed) < len(response.get_data()):
+                response.set_data(compressed)
+                response.headers['Content-Encoding'] = 'gzip'
+                response.headers['Content-Length'] = len(compressed)
+                response.headers['Vary'] = 'Accept-Encoding'
+        except Exception:
+            pass
+        
+    return response
+
 import uuid
 SERVER_STARTUP_ID = uuid.uuid4().hex
 
@@ -323,11 +350,13 @@ def api_get_stores():
     query = request.args.get('query')
     compliance = request.args.get('compliance')
     status = request.args.get('status')
-    limit = int(request.args.get('limit', 20))
-    offset = int(request.args.get('offset', 0))
+    page = request.args.get('page', type=int)
+    limit = int(request.args.get('limit', 25))
 
-    stores = get_medical_stores(query=query, compliance=compliance, status=status, limit=limit, offset=offset)
-    return jsonify({'stores': stores, 'total': len(stores)})
+    res = get_medical_stores(query=query, compliance=compliance, status=status, page=page, limit=limit)
+    if isinstance(res, dict):
+        return jsonify(res)
+    return jsonify({'stores': res, 'total': len(res)})
 
 @app.route('/api/stores/<store_id>', methods=['GET'])
 def api_get_store(store_id):
@@ -355,8 +384,12 @@ def api_delete_store(store_id):
 def api_get_pharmacists():
     query = request.args.get('query')
     store_id = request.args.get('store_id')
-    pharmacists = get_pharmacists(query=query, store_id=store_id)
-    return jsonify({'pharmacists': pharmacists, 'total': len(pharmacists)})
+    page = request.args.get('page', type=int)
+    limit = int(request.args.get('limit', 25))
+    res = get_pharmacists(query=query, store_id=store_id, page=page, limit=limit)
+    if isinstance(res, dict):
+        return jsonify(res)
+    return jsonify({'pharmacists': res, 'total': len(res)})
 
 @app.route('/api/pharmacists', methods=['POST'])
 @app.route('/api/pharmacists/<ph_id>', methods=['PUT'])
@@ -388,8 +421,13 @@ def api_delete_pharmacist(ph_id):
 def api_get_documents():
     store_id = request.args.get('store_id')
     category = request.args.get('category')
-    docs = get_documents(store_id=store_id, category=category)
-    return jsonify({'documents': docs})
+    query = request.args.get('query')
+    page = request.args.get('page', type=int)
+    limit = int(request.args.get('limit', 25))
+    res = get_documents(store_id=store_id, category=category, query=query, page=page, limit=limit)
+    if isinstance(res, dict):
+        return jsonify(res)
+    return jsonify({'documents': res})
 
 @app.route('/api/documents/upload', methods=['POST'])
 def api_upload_document():
@@ -449,8 +487,12 @@ def api_mark_notif_read(notif_id):
 
 @app.route('/api/activity-logs', methods=['GET'])
 def api_activity_logs():
-    logs = get_activity_logs()
-    return jsonify({'logs': logs})
+    page = request.args.get('page', type=int)
+    limit = int(request.args.get('limit', 25))
+    res = get_activity_logs(page=page, limit=limit)
+    if isinstance(res, dict):
+        return jsonify(res)
+    return jsonify({'logs': res})
 
 @app.route('/api/admin/users', methods=['GET', 'POST'])
 def api_admin_users():
