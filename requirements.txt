@@ -3,4 +3,6 @@ Flask-Cors==4.0.1
 Pillow==10.4.0
 reportlab==4.2.2
 gunicorn==22.0.0
-firebase-admin==6.5.0
+supabase==2.5.0
+postgrest==0.16.0
+python-dotenv==1.0.1

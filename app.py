@@ -14,11 +14,7 @@ from database import (
     mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates
 )
 from seed_data import generate_seed_data
-try:
-    from cloud_services import upload_document_to_firebase_storage, sync_to_firestore
-except ImportError:
-    upload_document_to_firebase_storage = None
-    sync_to_firestore = None
+from supabase_client import upload_to_supabase_storage
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
@@ -259,13 +255,13 @@ def api_upload_document():
     file_url = f"/static/docs/{file_name}"
     size_kb = random.randint(150, 800)
 
-    if file and upload_document_to_firebase_storage:
+    if file and upload_to_supabase_storage:
         file_bytes = file.read()
         size_kb = max(1, int(len(file_bytes) / 1024))
         file.seek(0)
-        fb_res = upload_document_to_firebase_storage(file, file_name, folder_category=category)
-        if fb_res.get('success'):
-            file_url = fb_res.get('url')
+        s_res = upload_to_supabase_storage(file, file_name, category=category)
+        if s_res.get('success'):
+            file_url = s_res.get('url')
 
     doc_data = {
         'store_id': store_id,
