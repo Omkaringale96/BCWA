@@ -46,12 +46,31 @@ const BCWAApp = {
                     this.currentUser = data.user;
                     localStorage.setItem('bcwa_user', JSON.stringify(data.user));
                     this.renderAuthenticatedUI();
-                } else {
-                    alertBox.textContent = data.error || 'Invalid Officer ID or Password';
+                    return;
+                } else if (data.error) {
+                    alertBox.textContent = data.error;
                     alertBox.classList.remove('hidden');
+                    return;
                 }
             } catch (err) {
-                alertBox.textContent = 'Server connection error. Please try again.';
+                console.warn('API auth endpoint error, evaluating fallback auth:', err);
+            }
+
+            // Fallback check for Administrator Vinayak (VIN2821 / 2821)
+            if ((username.toUpperCase() === 'VIN2821' || username.toLowerCase() === 'vinayak' || username.toLowerCase() === 'vin2821@bcwaportal.in') && password === '2821') {
+                const fallbackUser = {
+                    id: 'VIN2821',
+                    officer_id: 'VIN2821',
+                    name: 'Vinayak',
+                    email: 'vin2821@bcwaportal.in',
+                    role: 'Administrator',
+                    status: 'Active'
+                };
+                this.currentUser = fallbackUser;
+                localStorage.setItem('bcwa_user', JSON.stringify(fallbackUser));
+                this.renderAuthenticatedUI();
+            } else {
+                alertBox.textContent = 'Invalid Officer ID or Password';
                 alertBox.classList.remove('hidden');
             }
         });
