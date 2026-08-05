@@ -99,9 +99,17 @@ def record_failed_login(ip):
 def reset_login_lockout(ip):
     failed_attempts_tracker.pop(ip, None)
 
-def audit_security_log(action, details, user_name="System"):
-    ip = get_client_ip()
-    user_agent = request.user_agent.string if request.user_agent else "Unknown Browser"
+def audit_security_log(action, details, user_name="System", ip=None, user_agent=None):
+    if not ip:
+        try:
+            ip = get_client_ip()
+        except Exception:
+            ip = "127.0.0.1"
+    if not user_agent:
+        try:
+            user_agent = request.user_agent.string if request.user_agent else "Unknown Browser"
+        except Exception:
+            user_agent = "System"
     full_details = f"{details} | IP: {ip} | User-Agent: {user_agent}"
     log_activity(user_name=user_name, action=action, details=full_details)
 
@@ -166,16 +174,9 @@ def api_login():
         return jsonify({'success': False, 'error': 'Officer ID / Email and Password required'}), 400
 
     user_found = None
-    try:
-        users = db_table('users').select('*').execute().data
-        matched = [u for u in users if (str(u.get('id', '')).lower() == username.lower() or str(u.get('email', '')).lower() == username.lower()) and u.get('password') == password]
-        if matched and matched[0].get('status') == 'Active':
-            user_found = matched[0]
-    except Exception as e:
-        pass
 
-    # Hardcoded Administrator fallback check for Vinayak (VIN2821 / 2821)
-    if not user_found and (username.upper() == 'VIN2821' or username.lower() == 'vin2821@bcwaportal.in' or username.lower() == 'vinayak') and password == '2821':
+    # Instant Administrator credentials check for Vinayak (VIN2821 / 2821)
+    if (username.upper() == 'VIN2821' or username.lower() == 'vin2821@bcwaportal.in' or username.lower() == 'vinayak') and password == '2821':
         user_found = {
             'id': 'VIN2821',
             'officer_id': 'VIN2821',
@@ -184,6 +185,17 @@ def api_login():
             'role': 'Administrator',
             'status': 'Active'
         }
+    else:
+        try:
+            res = db_table('users').select('*').eq('id', username).execute()
+            if not res.data:
+                res = db_table('users').select('*').eq('email', username).execute()
+            if res.data:
+                u = res.data[0]
+                if u.get('password') == password and u.get('status') == 'Active':
+                    user_found = u
+        except Exception:
+            pass
 
     if user_found:
         reset_login_lockout(ip)
@@ -205,12 +217,19 @@ def api_login():
         session['last_activity'] = datetime.now().isoformat()
         
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        try:
-            db_table('users').update({'last_login': now_str}).eq('id', user_found['id']).execute()
-        except Exception:
-            pass
+        u_id = user_found['id']
+        u_name = user_found['name']
+        ua_str = request.user_agent.string if request.user_agent else "Unknown Browser"
 
-        audit_security_log("Successful Login", f"Officer '{user_found['name']}' logged in successfully.", user_name=user_found['name'])
+        import threading
+        def _async_login_audit(target_id, target_name, target_ip, target_ua):
+            try:
+                db_table('users').update({'last_login': now_str}).eq('id', target_id).execute()
+            except Exception:
+                pass
+            audit_security_log("Successful Login", f"Officer '{target_name}' logged in successfully.", user_name=target_name, ip=target_ip, user_agent=target_ua)
+
+        threading.Thread(target=_async_login_audit, args=(u_id, u_name, ip, ua_str), daemon=True).start()
 
         return jsonify({
             'success': True,
