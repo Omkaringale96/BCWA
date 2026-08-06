@@ -282,6 +282,75 @@ class BCWAPortalTestCase(unittest.TestCase):
             self.assertEqual(len(reg_logs), 0)
             print("Store Registration Failure Activity Log Guard Test Passed: Activity Log NOT created on failure.")
 
+    def test_notification_engine_expired_document_workflow(self):
+        from datetime import datetime, timedelta
+        from seed_data import clear_production_database
+        from app import reset_login_lockout
+        reset_login_lockout('127.0.0.1')
+        clear_production_database()
+
+        with self.app as c:
+            c.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
+
+            # 1. Register Medical Store with Drug License expiry set to yesterday (-1 day)
+            yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime('%Y-%m-%d')
+            store_payload = {
+                'id': 'MS-EXPIRED-99',
+                'firm_id': 'BCWA-MED-000099',
+                'store_name': 'Expired License Pharmacy',
+                'owner_name': 'Test Owner',
+                'owner_mobile': '9876543210',
+                'owner_email': 'expiredtest@bcwa.org',
+                'dl_20b_number': 'MH-TZ4-999999',
+                'dl_21b_number': 'MH-TZ4-999999',
+                'dl_expiry_date': yesterday_str,
+                'fssai_number': '21524999999999',
+                'fssai_expiry_date': '2028-12-31'
+            }
+            res_reg = c.post('/api/stores', json=store_payload)
+            self.assertEqual(res_reg.status_code, 200)
+
+            # 2. Run Notification Engine Scan Now
+            res_scan = c.post('/api/notifications/engine/run')
+            self.assertEqual(res_scan.status_code, 200)
+            scan_data = res_scan.get_json()
+            self.assertTrue(scan_data.get('success'))
+            self.assertGreaterEqual(scan_data['summary']['queued'], 1)
+            self.assertGreaterEqual(scan_data['summary']['sent'], 1)
+
+            # 3. Verify Active System Alert was created
+            res_notif = c.get('/api/notifications')
+            self.assertEqual(res_notif.status_code, 200)
+            notif_list = res_notif.get_json().get('notifications', [])
+            self.assertGreaterEqual(len(notif_list), 1)
+            expired_alerts = [n for n in notif_list if 'Drug License' in n.get('title', '') or 'Expired' in n.get('title', '')]
+            self.assertGreaterEqual(len(expired_alerts), 1)
+
+            # 4. Verify Notification Queue contains Sent item
+            res_q = c.get('/api/notifications/queue')
+            self.assertEqual(res_q.status_code, 200)
+            q_items = res_q.get_json().get('queue', [])
+            self.assertGreaterEqual(len(q_items), 1)
+            sent_items = [q for q in q_items if q.get('document_type') == 'Drug License']
+            self.assertGreaterEqual(len(sent_items), 1)
+
+            # 5. Verify Notification Log created
+            res_logs = c.get('/api/notifications/logs')
+            self.assertEqual(res_logs.status_code, 200)
+            logs = res_logs.get_json().get('logs', [])
+            self.assertGreaterEqual(len(logs), 1)
+            dl_logs = [l for l in logs if l.get('document_type') == 'Drug License']
+            self.assertGreaterEqual(len(dl_logs), 1)
+
+            # 6. Verify Dashboard Notification Counter and Critical Compliance Status
+            res_dash = c.get('/api/dashboard/stats')
+            self.assertEqual(res_dash.status_code, 200)
+            dash = res_dash.get_json()
+            self.assertGreaterEqual(dash.get('todays_notifications', 0), 1)
+            self.assertEqual(dash.get('compliance_status'), 'Critical')
+
+            print("Notification Engine Expired Document End-to-End Workflow Test Passed: Alert created, Queue processed, Email sent, Log recorded, Notification counter updated, Compliance Critical.")
+
 if __name__ == '__main__':
     unittest.main()
 

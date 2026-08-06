@@ -15,6 +15,7 @@ EXPIRY_DOC_CATEGORIES = {
     "Drug License",
     "Food License (FSSAI)",
     "Food License",
+    "Registration Certificate",
     "Pharmacist Registration Certificate",
     "State Pharmacy Council Registration",
     "PPP Card",
@@ -23,14 +24,17 @@ EXPIRY_DOC_CATEGORIES = {
     "Shop & Establishment License",
     "Biomedical Waste Authorization",
     "Fire NOC",
-    "Pollution Authorization",
-    "GST Registration"
+    "Pollution Authorization"
 }
 
 PERMANENT_DOC_CATEGORIES = {
     "Electricity Bill (Light Bill)",
+    "Electricity Bill",
     "Light Bill",
     "Namuna 8",
+    "GST",
+    "GST Registration",
+    "Rent Agreement",
     "Owner Aadhaar",
     "Owner PAN",
     "Owner Photo",
@@ -43,7 +47,6 @@ PERMANENT_DOC_CATEGORIES = {
     "Partnership Deed",
     "Property Documents",
     "Affidavits",
-    "Rent Agreement",
     "Cold Storage Certificate",
     "Tax Receipt",
     "Qualification Certificates",
@@ -66,6 +69,8 @@ def is_expiry_document(category):
     if cat_str in PERMANENT_DOC_CATEGORIES:
         return False
     cat_lower = cat_str.lower()
+    if any(k in cat_lower for k in ['light bill', 'electricity', 'rent agreement', 'namuna 8', 'gst', 'cheque', 'aadhaar', 'pan', 'photo']):
+        return False
     if any(k in cat_lower for k in ['license', 'licence', 'fssai', 'ppp', 'noc', 'authorization', 'certificate', 'registration']):
         return True
     return False
@@ -263,6 +268,15 @@ def get_dashboard_stats():
         failed_emails = 0
         last_run = 'Never'
 
+    if avg_score >= 90:
+        compliance_status = 'Excellent'
+    elif avg_score >= 75:
+        compliance_status = 'Good'
+    elif avg_score >= 50:
+        compliance_status = 'Warning'
+    else:
+        compliance_status = 'Critical'
+
     res = {
         'total_stores': total_stores,
         'total_pharmacists': total_pharmacists,
@@ -276,6 +290,7 @@ def get_dashboard_stats():
         'failed_emails': failed_emails,
         'last_reminder_run': last_run,
         'compliance_score': avg_score,
+        'compliance_status': compliance_status,
         'todays_notifications': len(notifications),
         'recent_activity': activity,
         'recent_stores': recent_stores
@@ -555,7 +570,6 @@ def save_medical_store(data):
         # DO NOT write Activity Log if database insert failed!
         raise RuntimeError(err_detail)
 
-    # Recalculate compliance score
     try:
         ph_list = db_table('pharmacists').select('*').eq('store_id', store_id).execute().data or []
         doc_cnt = len(db_table('documents').select('*').eq('store_id', store_id).execute().data or [])
@@ -563,6 +577,11 @@ def save_medical_store(data):
         db_table('medical_stores').update({'compliance_score': score, 'compliance_status': status_str}).eq('id', store_id).execute()
     except Exception as e_comp:
         logging.warning(f"[COMPLIANCE CALC NOTICE] {e_comp}")
+
+    try:
+        cache_clear()
+    except Exception:
+        pass
 
     return {'id': store_id, 'firm_id': firm_id, 'shop_code': shop_code, 'warnings': dups}
 

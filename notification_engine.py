@@ -15,12 +15,38 @@ from database import is_expiry_document
 REMINDER_STAGES = [90, 60, 30, 15, 10, 7, 3, 1, 0]
 
 def match_reminder_stage(days_remaining):
-    """Determine matching stage or expired interval (every 7 days for expired)."""
+    """Determine matching stage or expired state."""
     if days_remaining in REMINDER_STAGES:
         return days_remaining
-    elif days_remaining < 0 and (abs(days_remaining) % 7 == 0):
-        # Every 7 days for expired documents
+    elif days_remaining <= 0:
         return days_remaining
+    return None
+
+def create_active_system_alert(store_id, title, message, alert_type='Warning', target_date=None, days_remaining=0):
+    """Inserts an active alert into the notifications table if an unread alert for this store & title does not exist."""
+    if not store_id:
+        return None
+    try:
+        res = db_table('notifications').select('*').eq('store_id', store_id).eq('title', title).execute()
+        if not res.data:
+            notif_id = f"NOTIF-{uuid.uuid4().hex[:8].upper()}"
+            notif_payload = {
+                'id': notif_id,
+                'store_id': store_id,
+                'title': title,
+                'message': message,
+                'type': alert_type,
+                'target_date': str(target_date) if target_date else None,
+                'days_remaining': int(days_remaining),
+                'is_read': False,
+                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            db_table('notifications').insert(notif_payload).execute()
+            print(f"[ACTIVE SYSTEM ALERT CREATED] Store ID: {store_id} | Title: {title}")
+            logging.info(f"[ACTIVE SYSTEM ALERT CREATED] Store ID: {store_id} | Title: {title}")
+            return notif_id
+    except Exception as e:
+        logging.error(f"[ACTIVE ALERT ERROR] {str(e)}")
     return None
 
 def generate_reminder_html_email(recipient_name, store_name, doc_name, doc_num, expiry_date_str, days_remaining, firm_id="BCWA-MED-000001", pharmacist_name=None, issue_date_str="As Per Records"):
@@ -264,7 +290,7 @@ def safe_insert_queue_payload(queue_payload):
 def scan_and_queue_expiring_reminders():
     """
     Scan all medical stores, pharmacists, and document vault records.
-    Queue matching reminders into notification_queue (NEVER send directly during scan).
+    Generate active system alerts in notifications table and queue matching reminders into notification_queue.
     """
     today = datetime.now().date()
     queued_count = 0
@@ -278,35 +304,39 @@ def scan_and_queue_expiring_reminders():
         logging.error(f"[RENEWAL ENGINE SCAN ERROR] Failed to fetch data: {str(e)}")
         return {'queued': 0, 'skipped': 0, 'error': str(e)}
 
-    # 1. Scan Store Documents (Drug License 20B/21B, Food License)
+    # 1. Scan Store Level Documents (Drug License 20B/21B, Food License FSSAI)
     for s in stores:
         store_id = s.get('id')
+        if not store_id:
+            continue
         store_name = s.get('store_name', 'Medical Store')
         owner_name = s.get('owner_name', 'Store Owner')
-        owner_email = s.get('owner_email') or s.get('email')
-
-        if not owner_email:
-            continue
+        recipient_email = s.get('owner_email') or s.get('email') or s.get('contact_email') or 'admin@bcwa.org'
 
         # Drug License 20B/21B Expiry
         dl_expiry_str = s.get('dl_expiry_date')
         if dl_expiry_str:
             try:
-                exp_date = datetime.strptime(dl_expiry_str, '%Y-%m-%d').date()
+                exp_date = datetime.strptime(dl_expiry_str[:10], '%Y-%m-%d').date()
                 days_rem = (exp_date - today).days
                 stage = match_reminder_stage(days_rem)
                 if stage is not None:
+                    doc_num = f"{s.get('dl_20b_number', '')} / {s.get('dl_21b_number', '')}"
+                    alert_type = 'Critical' if days_rem <= 0 or days_rem <= 15 else 'Warning'
+                    alert_title = f"Drug License Expired ({abs(days_rem)} Days Ago)" if days_rem <= 0 else f"Drug License Expiring ({days_rem} Days Remaining)"
+                    alert_msg = f"{store_name} Drug License ({doc_num}) expired on {dl_expiry_str}." if days_rem <= 0 else f"{store_name} Drug License ({doc_num}) expires on {dl_expiry_str}."
+                    create_active_system_alert(store_id, alert_title, alert_msg, alert_type, dl_expiry_str, stage)
+
                     if not is_duplicate_queue_item(store_id, 'Drug License', stage):
-                        doc_num = f"{s.get('dl_20b_number', '')} / {s.get('dl_21b_number', '')}"
                         subject = generate_email_subject('Drug License', stage)
-                        firm_id = s.get('firm_id') or f"BCWA-MED-000001"
+                        firm_id = s.get('firm_id') or store_id
                         html = generate_reminder_html_email(owner_name, store_name, 'Drug License', doc_num, dl_expiry_str, stage, firm_id=firm_id)
                         
                         queue_payload = {
                             'id': f"Q-DL-{uuid.uuid4().hex[:8].upper()}",
                             'store_id': store_id,
                             'recipient_name': owner_name,
-                            'recipient_email': owner_email,
+                            'recipient_email': recipient_email,
                             'document_type': 'Drug License',
                             'document_number': doc_num,
                             'days_remaining': stage,
@@ -323,28 +353,33 @@ def scan_and_queue_expiring_reminders():
                             logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
                     else:
                         skipped_count += 1
-            except Exception:
-                pass
+            except Exception as e_dl:
+                logging.error(f"[DL SCAN ERROR] {e_dl}")
 
         # Food License (FSSAI) Expiry
         fssai_expiry_str = s.get('fssai_expiry_date')
         if fssai_expiry_str:
             try:
-                exp_date = datetime.strptime(fssai_expiry_str, '%Y-%m-%d').date()
+                exp_date = datetime.strptime(fssai_expiry_str[:10], '%Y-%m-%d').date()
                 days_rem = (exp_date - today).days
                 stage = match_reminder_stage(days_rem)
                 if stage is not None:
+                    doc_num = s.get('fssai_number', 'N/A')
+                    alert_type = 'Critical' if days_rem <= 0 or days_rem <= 15 else 'Warning'
+                    alert_title = f"Food License (FSSAI) Expired" if days_rem <= 0 else f"Food License (FSSAI) Expiring ({days_rem} Days Remaining)"
+                    alert_msg = f"{store_name} Food License ({doc_num}) expired on {fssai_expiry_str}." if days_rem <= 0 else f"{store_name} Food License ({doc_num}) expires on {fssai_expiry_str}."
+                    create_active_system_alert(store_id, alert_title, alert_msg, alert_type, fssai_expiry_str, stage)
+
                     if not is_duplicate_queue_item(store_id, 'Food License (FSSAI)', stage):
-                        doc_num = s.get('fssai_number', 'N/A')
                         subject = generate_email_subject('Food License (FSSAI)', stage)
-                        firm_id = s.get('firm_id') or f"BCWA-MED-000001"
+                        firm_id = s.get('firm_id') or store_id
                         html = generate_reminder_html_email(owner_name, store_name, 'Food License (FSSAI)', doc_num, fssai_expiry_str, stage, firm_id=firm_id)
 
                         queue_payload = {
                             'id': f"Q-FS-{uuid.uuid4().hex[:8].upper()}",
                             'store_id': store_id,
                             'recipient_name': owner_name,
-                            'recipient_email': owner_email,
+                            'recipient_email': recipient_email,
                             'document_type': 'Food License (FSSAI)',
                             'document_number': doc_num,
                             'days_remaining': stage,
@@ -361,31 +396,34 @@ def scan_and_queue_expiring_reminders():
                             logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
                     else:
                         skipped_count += 1
-            except Exception:
-                pass
+            except Exception as e_fs:
+                logging.error(f"[FSSAI SCAN ERROR] {e_fs}")
 
-    # 2. Scan Pharmacist Documents (PPP Card, MSPC Registration)
+    # 2. Scan Pharmacist Documents (PPP Card, Registration Certificate)
     for p in pharmacists:
         ph_id = p.get('id')
         store_id = p.get('store_id')
         ph_name = p.get('full_name', 'Pharmacist')
-        ph_email = p.get('email')
-
-        if not ph_email:
-            continue
-
+        
         store = next((st for st in stores if st.get('id') == store_id), {}) if store_id else {}
         store_name = store.get('store_name', 'Associated Pharmacy')
+        recipient_email = p.get('email') or store.get('owner_email') or store.get('email') or 'admin@bcwa.org'
 
+        # PPP Card Expiry
         ppp_exp_str = p.get('ppp_expiry')
         if ppp_exp_str:
             try:
-                exp_date = datetime.strptime(ppp_exp_str, '%Y-%m-%d').date()
+                exp_date = datetime.strptime(ppp_exp_str[:10], '%Y-%m-%d').date()
                 days_rem = (exp_date - today).days
                 stage = match_reminder_stage(days_rem)
                 if stage is not None:
+                    doc_num = p.get('ppp_number', 'N/A')
+                    alert_type = 'Critical' if days_rem <= 0 or days_rem <= 15 else 'Warning'
+                    alert_title = f"PPP Card Expired - {ph_name}" if days_rem <= 0 else f"PPP Card Expiring - {ph_name} ({days_rem} Days Remaining)"
+                    alert_msg = f"Pharmacist {ph_name} ({store_name}) PPP Card ({doc_num}) expired on {ppp_exp_str}." if days_rem <= 0 else f"Pharmacist {ph_name} ({store_name}) PPP Card ({doc_num}) expires on {ppp_exp_str}."
+                    create_active_system_alert(store_id or ph_id, alert_title, alert_msg, alert_type, ppp_exp_str, stage)
+
                     if not is_duplicate_queue_item(store_id or ph_id, 'PPP Card', stage):
-                        doc_num = p.get('ppp_number', 'N/A')
                         subject = generate_email_subject('PPP Card', stage)
                         html = generate_reminder_html_email(ph_name, store_name, 'PPP Card', doc_num, ppp_exp_str, stage, pharmacist_name=ph_name)
 
@@ -394,7 +432,7 @@ def scan_and_queue_expiring_reminders():
                             'store_id': store_id,
                             'pharmacist_id': ph_id,
                             'recipient_name': ph_name,
-                            'recipient_email': ph_email,
+                            'recipient_email': recipient_email,
                             'document_type': 'PPP Card',
                             'document_number': doc_num,
                             'days_remaining': stage,
@@ -411,47 +449,93 @@ def scan_and_queue_expiring_reminders():
                             logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
                     else:
                         skipped_count += 1
-            except Exception:
-                pass
+            except Exception as e_ppp:
+                logging.error(f"[PPP SCAN ERROR] {e_ppp}")
 
-    # 3. Dynamic Scan of Vault Documents (Rent Agreement, Shop Act, Inspection, Fire NOC, GST, etc.)
+        # Registration Certificate Expiry
+        reg_exp_str = p.get('reg_expiry') or p.get('mspc_expiry')
+        if reg_exp_str:
+            try:
+                exp_date = datetime.strptime(reg_exp_str[:10], '%Y-%m-%d').date()
+                days_rem = (exp_date - today).days
+                stage = match_reminder_stage(days_rem)
+                if stage is not None:
+                    doc_num = p.get('mspc_number', 'N/A')
+                    alert_type = 'Critical' if days_rem <= 0 or days_rem <= 15 else 'Warning'
+                    alert_title = f"Pharmacist Registration Expired - {ph_name}" if days_rem <= 0 else f"Pharmacist Registration Expiring - {ph_name} ({days_rem} Days Remaining)"
+                    alert_msg = f"Pharmacist {ph_name} ({store_name}) Registration ({doc_num}) expired on {reg_exp_str}." if days_rem <= 0 else f"Pharmacist {ph_name} ({store_name}) Registration ({doc_num}) expires on {reg_exp_str}."
+                    create_active_system_alert(store_id or ph_id, alert_title, alert_msg, alert_type, reg_exp_str, stage)
+
+                    if not is_duplicate_queue_item(store_id or ph_id, 'Pharmacist Registration Certificate', stage):
+                        subject = generate_email_subject('Pharmacist Registration Certificate', stage)
+                        html = generate_reminder_html_email(ph_name, store_name, 'Pharmacist Registration Certificate', doc_num, reg_exp_str, stage, pharmacist_name=ph_name)
+
+                        queue_payload = {
+                            'id': f"Q-REG-{uuid.uuid4().hex[:8].upper()}",
+                            'store_id': store_id,
+                            'pharmacist_id': ph_id,
+                            'recipient_name': ph_name,
+                            'recipient_email': recipient_email,
+                            'document_type': 'Pharmacist Registration Certificate',
+                            'document_number': doc_num,
+                            'days_remaining': stage,
+                            'email_subject': subject,
+                            'email_body_html': html,
+                            'status': 'Pending',
+                            'retry_count': 0,
+                            'created_at': datetime.now().isoformat()
+                        }
+                        try:
+                            safe_insert_queue_payload(queue_payload)
+                            queued_count += 1
+                        except Exception as e:
+                            logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
+                    else:
+                        skipped_count += 1
+            except Exception as e_reg:
+                logging.error(f"[REG SCAN ERROR] {e_reg}")
+
+    # 3. Dynamic Scan of Vault Documents (Drug License, Food License, PPP Card, Registration Certificate, Fire NOC, etc.)
     for d in documents:
         d_id = d.get('id')
         store_id = d.get('store_id')
         doc_category = d.get('category', 'Vault Document')
         
-        # Smart Document Classification: Skip Permanent Documents from Generating Expiry Reminders
-        if not is_expiry_document(doc_category):
-            continue
-
-        expiry_str = d.get('expiry_date')
-        doc_num = d.get('document_number', 'N/A')
-
+        # Check if this document is an Expiry Document OR has an explicit renewal_date/expiry_date
+        expiry_str = d.get('expiry_date') or d.get('renewal_date')
         if not expiry_str:
             continue
 
-        store = next((st for st in stores if st.get('id') == store_id), {}) if store_id else {}
-        owner_name = store.get('owner_name', 'Store Owner') if store else 'Member'
-        owner_email = store.get('owner_email') or store.get('email') if store else None
-
-        if not owner_email:
+        if not is_expiry_document(doc_category) and not d.get('renewal_date'):
+            # Permanent documents (Light Bill, Rent Agreement, Namuna 8, GST) skip unless explicit renewal_date configured
             continue
 
+        doc_num = d.get('document_number', 'N/A')
+        store = next((st for st in stores if st.get('id') == store_id), {}) if store_id else {}
+        owner_name = store.get('owner_name', 'Store Owner') if store else 'Member'
+        store_name = store.get('store_name', 'Medical Store') if store else 'Medical Store'
+        recipient_email = store.get('owner_email') or store.get('email') or store.get('contact_email') or 'admin@bcwa.org'
+
         try:
-            exp_date = datetime.strptime(expiry_str, '%Y-%m-%d').date()
+            exp_date = datetime.strptime(expiry_str[:10], '%Y-%m-%d').date()
             days_rem = (exp_date - today).days
             stage = match_reminder_stage(days_rem)
             if stage is not None:
+                alert_type = 'Critical' if days_rem <= 0 or days_rem <= 15 else 'Warning'
+                alert_title = f"{doc_category} Expired" if days_rem <= 0 else f"{doc_category} Expiring ({days_rem} Days Remaining)"
+                alert_msg = f"Document {doc_category} ({doc_num}) for {store_name} expired on {expiry_str}." if days_rem <= 0 else f"Document {doc_category} ({doc_num}) for {store_name} expires on {expiry_str}."
+                create_active_system_alert(store_id or d_id, alert_title, alert_msg, alert_type, expiry_str, stage)
+
                 if not is_duplicate_queue_item(store_id or d_id, doc_category, stage):
                     subject = generate_email_subject(doc_category, stage)
-                    html = generate_reminder_html_email(owner_name, store.get('store_name', 'Medical Store'), doc_category, doc_num, expiry_str, stage)
+                    html = generate_reminder_html_email(owner_name, store_name, doc_category, doc_num, expiry_str, stage)
 
                     queue_payload = {
                         'id': f"Q-DOC-{uuid.uuid4().hex[:8].upper()}",
                         'store_id': store_id,
                         'document_id': d_id,
                         'recipient_name': owner_name,
-                        'recipient_email': owner_email,
+                        'recipient_email': recipient_email,
                         'document_type': doc_category,
                         'document_number': doc_num,
                         'days_remaining': stage,
@@ -468,8 +552,8 @@ def scan_and_queue_expiring_reminders():
                         logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
                 else:
                     skipped_count += 1
-        except Exception:
-            pass
+        except Exception as e_doc:
+            logging.error(f"[VAULT DOC SCAN ERROR] {e_doc}")
 
     try:
         db_table('settings').upsert({'key': 'last_reminder_run', 'value': datetime.now().strftime('%Y-%m-%d %H:%M:%S IST')}).execute()
@@ -599,8 +683,13 @@ def process_notification_queue(limit=50):
 
 def run_reminder_engine():
     """Manual or scheduled execution of full scan + queue processing."""
+    from database import cache_clear
     scan_res = scan_and_queue_expiring_reminders()
     proc_res = process_notification_queue()
+    try:
+        cache_clear()
+    except Exception:
+        pass
     return {
         'queued': scan_res.get('queued', 0),
         'skipped': scan_res.get('skipped', 0),
