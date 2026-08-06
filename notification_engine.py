@@ -720,6 +720,7 @@ def retry_failed_queue_item(queue_id):
 def start_background_notification_scheduler():
     """Start 24-hour background scheduler thread running daily at 08:00 AM IST / periodic sweep."""
     def worker():
+        time.sleep(2)  # Immediate initial sweep after startup
         while True:
             try:
                 run_reminder_engine()

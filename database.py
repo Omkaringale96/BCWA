@@ -579,6 +579,12 @@ def save_medical_store(data):
         logging.warning(f"[COMPLIANCE CALC NOTICE] {e_comp}")
 
     try:
+        from notification_engine import run_reminder_engine
+        run_reminder_engine()
+    except Exception as e_rem:
+        logging.warning(f"[AUTO REMINDER NOTICE] {e_rem}")
+
+    try:
         cache_clear()
     except Exception:
         pass
@@ -680,6 +686,17 @@ def save_pharmacist(data):
     else:
         db_table('pharmacists').update(record).eq('id', ph_id).execute()
         log_activity("Office Staff", "Pharmacist Updated", f"Updated Pharmacist: {data.get('full_name')}", data.get('store_id'))
+
+    try:
+        from notification_engine import run_reminder_engine
+        run_reminder_engine()
+    except Exception as e_rem:
+        logging.warning(f"[AUTO REMINDER NOTICE] {e_rem}")
+
+    try:
+        cache_clear()
+    except Exception:
+        pass
 
     return {'id': ph_id, 'warnings': dups}
 
@@ -796,6 +813,18 @@ def save_document(data):
 
     db_table('documents').upsert(record).execute()
     log_activity("Office Staff", "Document Uploaded", f"Uploaded {data.get('category')} for Store ID: {data.get('store_id')}", data.get('store_id'))
+
+    try:
+        from notification_engine import run_reminder_engine
+        run_reminder_engine()
+    except Exception as e_rem:
+        logging.warning(f"[AUTO REMINDER NOTICE] {e_rem}")
+
+    try:
+        cache_clear()
+    except Exception:
+        pass
+
     return {'id': doc_id, 'quality_status': quality_status, 'quality_notes': quality_notes}
 
 def delete_document(doc_id):
