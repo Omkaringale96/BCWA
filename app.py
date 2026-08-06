@@ -1105,6 +1105,22 @@ def api_admin_send_test_email():
         logging.error(f"[TEST EMAIL ROUTE EXCEPTION] {err_msg}\n{traceback.format_exc()}")
         return jsonify({'success': False, 'error': f"Server Exception: {err_msg}"}), 500
 
+@app.route('/api/admin/reset-production-database', methods=['POST'])
+def api_admin_reset_production_database():
+    user = session.get('user')
+    if not user or user.get('role') != 'Administrator':
+        return jsonify({'success': False, 'error': 'Administrator access required'}), 403
+
+    try:
+        from seed_data import clear_production_database
+        clear_production_database()
+        return jsonify({
+            'success': True,
+            'message': 'Database reset complete. All test records purged.'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # -----------------------------------------------------------------------------
 # MEDICAL STORE SELF-SERVICE PORTAL & TENANT APIS
 # -----------------------------------------------------------------------------

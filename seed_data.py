@@ -76,13 +76,25 @@ def clear_production_database():
         client = get_supabase_client()
         if client:
             # Delete all non-admin users
-            client.table('users').delete().neq('id', 'VIN2821').execute()
+            try:
+                client.table('users').delete().neq('id', 'VIN2821').execute()
+            except Exception:
+                pass
+
             # Delete all records from production tables
             for table_name in ['documents', 'pharmacists', 'medical_stores', 'store_accounts', 'notification_queue', 'notification_logs', 'notifications', 'activity_logs']:
                 try:
-                    client.table(table_name).delete().neq('id', 'NON_EXISTENT_ID').execute()
-                except Exception:
-                    pass
+                    rows = client.table(table_name).select('*').execute().data or []
+                    if rows:
+                        # Delete by ID list if present
+                        ids = [str(r.get('id')) for r in rows if r.get('id')]
+                        if ids:
+                            for chunk in [ids[i:i + 100] for i in range(0, len(ids), 100)]:
+                                client.table(table_name).delete().in_('id', chunk).execute()
+                        else:
+                            client.table(table_name).delete().neq('created_at', '1900-01-01').execute()
+                except Exception as e_tbl:
+                    print(f"[SUPABASE PURGE NOTICE {table_name}] {e_tbl}")
     except Exception as e:
         print(f"[SUPABASE PURGE NOTICE] {e}")
 
