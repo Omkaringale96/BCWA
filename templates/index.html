@@ -457,8 +457,8 @@
                                 <thead>
                                     <tr>
                                         <th>Pharmacist Name</th>
-                                        <th>MSPC Reg Number</th>
-                                        <th>PPP Number &amp; Expiry</th>
+                                        <th>MSPC Reg No. &amp; Reg Expiry</th>
+                                        <th>PPP No. &amp; PPP Expiry</th>
                                         <th>Assigned Medical Store</th>
                                         <th>Qualification</th>
                                         <th>Contact</th>
@@ -1036,19 +1036,26 @@
                         <input type="text" id="ph-form-name" class="form-control" required>
                     </div>
 
-                    <div class="form-group">
-                        <label>MSPC Registration Number *</label>
-                        <input type="text" id="ph-form-mspc" class="form-control" required placeholder="MSPC-XXXXXX">
+                    <div class="form-row" style="display: flex; gap: 15px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label>MSPC Registration Number *</label>
+                            <input type="text" id="ph-form-mspc" class="form-control" required placeholder="MSPC-XXXXXX">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>MSPC Registration Expiry Date *</label>
+                            <input type="date" id="ph-form-reg-expiry" class="form-control" required>
+                        </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>PPP Number *</label>
-                        <input type="text" id="ph-form-ppp" class="form-control" required placeholder="PPP-MH-XXXXXX">
-                    </div>
-
-                    <div class="form-group">
-                        <label>PPP Expiry Date *</label>
-                        <input type="date" id="ph-form-ppp-expiry" class="form-control" required>
+                    <div class="form-row" style="display: flex; gap: 15px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label>PPP Number *</label>
+                            <input type="text" id="ph-form-ppp" class="form-control" required placeholder="PPP-MH-XXXXXX">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>PPP Expiry Date *</label>
+                            <input type="date" id="ph-form-ppp-expiry" class="form-control" required>
+                        </div>
                     </div>
 
                     <div class="form-group">

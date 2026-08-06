@@ -163,6 +163,16 @@ def calculate_compliance_score(store_dict, pharmacists_list, docs_count):
             except Exception:
                 pass
 
+            try:
+                if p.get('reg_expiry'):
+                    reg_exp = datetime.strptime(p['reg_expiry'], '%Y-%m-%d').date()
+                    if reg_exp < today:
+                        score -= 15
+                    elif (reg_exp - today).days <= 30:
+                        score -= 10
+            except Exception:
+                pass
+
     if docs_count < 2:
         score -= 10
 
@@ -241,10 +251,13 @@ def get_dashboard_stats():
     ppp_expiring = sum(1 for p in pharmacists if today_str <= str(p.get('ppp_expiry', '')) <= d90)
     ppp_expired = sum(1 for p in pharmacists if str(p.get('ppp_expiry', '')) < today_str)
 
+    reg_expiring = sum(1 for p in pharmacists if p.get('reg_expiry') and today_str <= str(p.get('reg_expiry', '')) <= d90)
+    reg_expired = sum(1 for p in pharmacists if p.get('reg_expiry') and str(p.get('reg_expiry', '')) < today_str)
+
     doc_expired = sum(1 for d in documents if d.get('expiry_date') and str(d.get('expiry_date')) < today_str)
 
-    total_expired = dl_expired + fssai_expired + ppp_expired + doc_expired
-    upcoming_renewals = dl_expiring + fssai_expiring + ppp_expiring
+    total_expired = dl_expired + fssai_expired + ppp_expired + reg_expired + doc_expired
+    upcoming_renewals = dl_expiring + fssai_expiring + ppp_expiring + reg_expiring
 
     scores = [s.get('compliance_score', 100) for s in stores] if stores else []
     avg_score = round(sum(scores) / len(scores), 1) if stores else 0.0
@@ -873,6 +886,17 @@ def get_renewal_calendar_events():
                 'store_id': p.get('store_id'),
                 'store_name': f"PPP Expiry: {p['full_name']}",
                 'type': 'PPP Card Expiry',
+                'date': exp,
+                'status': status
+            })
+        if p.get('reg_expiry'):
+            exp = str(p['reg_expiry'])
+            status = 'Green' if exp > (today + timedelta(days=90)).strftime('%Y-%m-%d') else ('Yellow' if exp >= today.strftime('%Y-%m-%d') else 'Red')
+            events.append({
+                'id': f"EV-REG-{p['id']}",
+                'store_id': p.get('store_id'),
+                'store_name': f"Registration Expiry: {p['full_name']}",
+                'type': 'Pharmacist Registration Certificate Expiry',
                 'date': exp,
                 'status': status
             })

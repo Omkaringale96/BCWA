@@ -724,10 +724,13 @@ const BCWAApp = {
                         <strong>${ph.full_name}</strong>
                         <div class="text-secondary" style="font-size:11px;">Status: ${ph.status}</div>
                     </td>
-                    <td><code>${ph.mspc_number}</code></td>
+                    <td>
+                        <div><code>${ph.mspc_number}</code></div>
+                        <small class="text-secondary">Reg Exp: <strong>${ph.reg_expiry || ph.ppp_expiry || 'N/A'}</strong></small>
+                    </td>
                     <td>
                         <div><code>${ph.ppp_number}</code></div>
-                        <small class="text-secondary">Exp: ${ph.ppp_expiry}</small>
+                        <small class="text-secondary">PPP Exp: <strong>${ph.ppp_expiry || 'N/A'}</strong></small>
                     </td>
                     <td>${ph.store_name ? `<strong>${ph.store_name}</strong>` : '<span class="text-muted">Unassigned</span>'}</td>
                     <td><span class="badge badge-info">${ph.qualification}</span></td>
@@ -1529,9 +1532,9 @@ const BCWAApp = {
             const payload = {
                 full_name: document.getElementById('ph-form-name').value,
                 mspc_number: document.getElementById('ph-form-mspc').value,
+                reg_expiry: document.getElementById('ph-form-reg-expiry').value,
                 ppp_number: document.getElementById('ph-form-ppp').value,
                 ppp_expiry: document.getElementById('ph-form-ppp-expiry').value,
-                reg_expiry: document.getElementById('ph-form-ppp-expiry').value,
                 store_id: document.getElementById('ph-form-store-id').value,
                 qualification: document.getElementById('ph-form-qualification').value,
                 mobile: document.getElementById('ph-form-mobile').value,
