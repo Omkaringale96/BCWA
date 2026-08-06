@@ -531,8 +531,24 @@ def api_save_store(store_id=None):
     if store_id:
         data['id'] = sanitize_string(store_id, 50)
 
-    res = save_medical_store(data)
-    return jsonify({'success': True, 'id': res['id'], 'shop_code': res['shop_code'], 'warnings': res['warnings']})
+    try:
+        res = save_medical_store(data)
+        return jsonify({
+            'success': True,
+            'id': res['id'],
+            'firm_id': res.get('firm_id', res['id']),
+            'shop_code': res['shop_code'],
+            'warnings': res['warnings']
+        })
+    except ValueError as ve:
+        err_msg = str(ve)
+        logging.warning(f"[STORE REGISTRATION VALIDATION ERROR] {err_msg}")
+        return jsonify({'success': False, 'error': err_msg}), 400
+    except Exception as e:
+        import traceback
+        err_msg = str(e)
+        logging.error(f"[STORE REGISTRATION ROUTE EXCEPTION] {err_msg}\n{traceback.format_exc()}")
+        return jsonify({'success': False, 'error': f"Failed to save Medical Store: {err_msg}"}), 500
 
 @app.route('/api/stores/<store_id>', methods=['DELETE'])
 @admin_required

@@ -1472,31 +1472,56 @@ const BCWAApp = {
             const id = document.getElementById('store-form-id').value;
 
             const payload = {
-                store_name: document.getElementById('store-form-name').value,
-                owner_name: document.getElementById('store-form-owner-name').value,
-                owner_mobile: document.getElementById('store-form-owner-mobile').value,
-                dl_20b_number: document.getElementById('store-form-dl-20b').value,
-                dl_21b_number: document.getElementById('store-form-dl-21b').value,
-                dl_issue_date: document.getElementById('store-form-dl-issue').value,
-                dl_expiry_date: document.getElementById('store-form-dl-expiry').value,
-                fssai_number: document.getElementById('store-form-fssai').value,
-                fssai_expiry_date: document.getElementById('store-form-fssai-expiry').value,
-                fssai_issue_date: document.getElementById('store-form-dl-issue').value,
-                address_line1: document.getElementById('store-form-address').value,
-                area: document.getElementById('store-form-area').value
+                store_name: document.getElementById('store-form-name')?.value || '',
+                business_type: document.getElementById('store-form-business-type')?.value || 'Retail Pharmacy',
+                drug_license_category: document.getElementById('store-form-dl-cat')?.value || '20B / 21B',
+                owner_name: document.getElementById('store-form-owner-name')?.value || '',
+                owner_mobile: document.getElementById('store-form-owner-mobile')?.value || '',
+                owner_whatsapp: document.getElementById('store-form-owner-whatsapp')?.value || '',
+                owner_email: document.getElementById('store-form-owner-email')?.value || '',
+                owner_pan: document.getElementById('store-form-owner-pan')?.value || '',
+                owner_aadhaar: document.getElementById('store-form-owner-aadhaar')?.value || '',
+                dl_20b_number: document.getElementById('store-form-dl-20b')?.value || '',
+                dl_21b_number: document.getElementById('store-form-dl-21b')?.value || '',
+                dl_issue_date: document.getElementById('store-form-dl-issue')?.value || '',
+                dl_expiry_date: document.getElementById('store-form-dl-expiry')?.value || '',
+                fssai_number: document.getElementById('store-form-fssai')?.value || '',
+                fssai_expiry_date: document.getElementById('store-form-fssai-expiry')?.value || '',
+                fssai_issue_date: document.getElementById('store-form-dl-issue')?.value || '',
+                address_line1: document.getElementById('store-form-address')?.value || '',
+                area: document.getElementById('store-form-area')?.value || 'Boisar'
             };
 
             const url = id ? `/api/stores/${id}` : '/api/stores';
             const method = id ? 'PUT' : 'POST';
 
-            await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+            try {
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
-            closeModal('modal-store');
-            this.loadMedicalStores();
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    closeModal('modal-store');
+                    alert(id ? 'Medical Store updated successfully!' : 'Medical Store registered successfully!');
+                    await this.loadMedicalStores();
+                    await this.loadDashboardStats();
+                    if (typeof this.loadActivityLogs === 'function') await this.loadActivityLogs();
+                } else {
+                    const warnBox = document.getElementById('store-duplicate-warning');
+                    if (warnBox) {
+                        warnBox.textContent = data.error || 'Failed to save Medical Store.';
+                        warnBox.classList.remove('hidden');
+                    } else {
+                        alert(data.error || 'Failed to save Medical Store.');
+                    }
+                }
+            } catch (err) {
+                console.error('Store Registration Error:', err);
+                alert('Network or server error occurred during registration.');
+            }
         });
 
         document.getElementById('form-pharmacist')?.addEventListener('submit', async (e) => {

@@ -145,14 +145,20 @@ class SupabaseInsertBuilder:
         if client:
             try:
                 res = client.table(self.table_name).insert(self.data).execute()
+                print(f"[SUPABASE INSERT SUCCESS] Table '{self.table_name}' | Data: {res.data}")
+                logging.info(f"[SUPABASE INSERT SUCCESS] Table '{self.table_name}' | Data: {res.data}")
                 return SupabaseResponse(res.data)
             except Exception as e:
                 err_str = str(e)
                 if 'PGRST205' in err_str or 'Could not find the table' in err_str:
                     logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
                 else:
-                    logging.error(f"Supabase insert error in {self.table_name}: {e}")
+                    err_msg = f"[SUPABASE INSERT FAILURE] Table '{self.table_name}' | Error: {e}"
+                    print(err_msg)
+                    print(traceback.format_exc())
+                    logging.error(err_msg)
                     logging.error(traceback.format_exc())
+                    raise e
 
         rows = _mock_storage.setdefault(self.table_name, [])
         items = self.data if isinstance(self.data, list) else [self.data]
@@ -169,14 +175,20 @@ class SupabaseUpsertBuilder:
         if client:
             try:
                 res = client.table(self.table_name).upsert(self.data).execute()
+                print(f"[SUPABASE UPSERT SUCCESS] Table '{self.table_name}' | Data: {res.data}")
+                logging.info(f"[SUPABASE UPSERT SUCCESS] Table '{self.table_name}' | Data: {res.data}")
                 return SupabaseResponse(res.data)
             except Exception as e:
                 err_str = str(e)
                 if 'PGRST205' in err_str or 'Could not find the table' in err_str:
                     logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
                 else:
-                    logging.error(f"Supabase upsert error in {self.table_name}: {e}")
+                    err_msg = f"[SUPABASE UPSERT FAILURE] Table '{self.table_name}' | Error: {e}"
+                    print(err_msg)
+                    print(traceback.format_exc())
+                    logging.error(err_msg)
                     logging.error(traceback.format_exc())
+                    raise e
 
         rows = _mock_storage.setdefault(self.table_name, [])
         items = self.data if isinstance(self.data, list) else [self.data]
@@ -188,10 +200,6 @@ class SupabaseUpsertBuilder:
             else:
                 rows.append(item)
         return SupabaseResponse(items)
-        return SupabaseUpdateBuilder(self.table_name, data)
-
-    def delete(self):
-        return SupabaseDeleteBuilder(self.table_name)
 
 class SupabaseQueryBuilder:
     def __init__(self, table_name, columns):
@@ -299,14 +307,20 @@ class SupabaseUpdateBuilder:
                 for op, col, val in self.filters:
                     if op == 'eq': q = q.eq(col, val)
                 res = q.execute()
+                print(f"[SUPABASE UPDATE SUCCESS] Table '{self.table_name}' | Data: {res.data}")
+                logging.info(f"[SUPABASE UPDATE SUCCESS] Table '{self.table_name}' | Data: {res.data}")
                 return SupabaseResponse(res.data)
             except Exception as e:
                 err_str = str(e)
                 if 'PGRST205' in err_str or 'Could not find the table' in err_str:
                     logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
                 else:
-                    logging.error(f"Supabase update error in {self.table_name}: {e}")
+                    err_msg = f"[SUPABASE UPDATE FAILURE] Table '{self.table_name}' | Error: {e}"
+                    print(err_msg)
+                    print(traceback.format_exc())
+                    logging.error(err_msg)
                     logging.error(traceback.format_exc())
+                    raise e
 
         rows = _mock_storage.get(self.table_name, [])
         updated = []

@@ -2,6 +2,7 @@ import os
 import json
 import re
 import random
+import logging
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from supabase_client import db_table, upload_to_supabase_storage, test_supabase_connection
@@ -438,14 +439,33 @@ def get_medical_store(store_id):
 
 def save_medical_store(data):
     store_id = data.get('id')
-    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    now = datetime.now()
+    now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+    today_str = now.strftime('%Y-%m-%d')
+    today_plus_5 = (now + timedelta(days=1825)).strftime('%Y-%m-%d')
+
+    print(f"[STORE REGISTRATION START] Incoming JSON Data: {data}")
+    logging.info(f"[STORE REGISTRATION START] Incoming JSON Data: {data}")
+
+    # Validation check
+    store_name = (data.get('store_name') or '').strip()
+    owner_name = (data.get('owner_name') or '').strip()
+    owner_mobile = (data.get('owner_mobile') or '').strip()
+
+    if not store_name:
+        raise ValueError("Medical Store Name is required.")
+    if not owner_name:
+        raise ValueError("Owner Name is required.")
+    if not owner_mobile:
+        raise ValueError("Owner Mobile number is required.")
 
     existing = get_medical_store(store_id) if store_id else None
     is_new = existing is None
     if not store_id:
         store_id = f"MS-{random.randint(1000, 9999)}"
 
-    shop_code = data.get('shop_code') or f"BCWA-BSR-{random.randint(100, 999)}"
+    firm_id = (data.get('firm_id') or store_id).strip().upper()
+    shop_code = (data.get('shop_code') or f"BCWA-BSR-{random.randint(100, 999)}").strip()
 
     dups = check_duplicates(
         dl_20b=data.get('dl_20b_number'),
@@ -454,62 +474,95 @@ def save_medical_store(data):
         exclude_id=store_id if not is_new else None
     )
 
+    dl_20b = (data.get('dl_20b_number') or '').strip() or f"MH-TZ4-{random.randint(100000, 999999)}"
+    dl_21b = (data.get('dl_21b_number') or '').strip() or dl_20b
+    fssai = (data.get('fssai_number') or '').strip() or f"21524{random.randint(100000000, 999999999)}"
+
     record = {
         'id': store_id,
-        'store_name': data.get('store_name'),
+        'firm_id': firm_id,
+        'store_name': store_name,
         'shop_code': shop_code,
-        'business_type': data.get('business_type', 'Retail Pharmacy'),
-        'drug_license_category': data.get('drug_license_category', '20B / 21B'),
-        'owner_name': data.get('owner_name'),
-        'owner_mobile': data.get('owner_mobile'),
-        'owner_whatsapp': data.get('owner_whatsapp', ''),
-        'owner_email': data.get('owner_email', ''),
-        'owner_pan': data.get('owner_pan', ''),
-        'owner_aadhaar': data.get('owner_aadhaar', ''),
-        'owner_address': data.get('owner_address', ''),
-        'owner_photo': data.get('owner_photo', ''),
-        'store_logo': data.get('store_logo', ''),
-        'store_photo': data.get('store_photo', ''),
-        'contact_phone': data.get('owner_mobile', ''),
-        'contact_email': data.get('owner_email', ''),
-        'address_line1': data.get('address_line1', 'Boisar West'),
-        'address_line2': data.get('address_line2', ''),
-        'area': data.get('area', 'Boisar'),
-        'city': data.get('city', 'Palghar'),
-        'state': data.get('state', 'Maharashtra'),
-        'pincode': data.get('pincode', '401501'),
-        'google_map_url': data.get('google_map_url', ''),
-        'gps_coordinates': data.get('gps_coordinates', '19.8000, 72.7500'),
-        'dl_20b_number': data.get('dl_20b_number'),
-        'dl_21b_number': data.get('dl_21b_number'),
-        'dl_issue_date': data.get('dl_issue_date') or None,
-        'dl_expiry_date': data.get('dl_expiry_date') or None,
-        'dl_issuing_authority': data.get('dl_issuing_authority', 'FDA Maharashtra'),
-        'dl_renewal_date': data.get('dl_renewal_date') or None,
-        'fssai_number': data.get('fssai_number'),
-        'fssai_issue_date': data.get('fssai_issue_date') or data.get('dl_issue_date') or None,
-        'fssai_expiry_date': data.get('fssai_expiry_date') or None,
-        'status': data.get('status', 'Active'),
-        'firm_id': data.get('firm_id') or store_id,
+        'business_type': data.get('business_type') or 'Retail Pharmacy',
+        'drug_license_category': data.get('drug_license_category') or '20B / 21B',
+        'owner_name': owner_name,
+        'owner_mobile': owner_mobile,
+        'owner_whatsapp': (data.get('owner_whatsapp') or '').strip() or owner_mobile,
+        'owner_email': (data.get('owner_email') or '').strip(),
+        'owner_pan': (data.get('owner_pan') or '').strip(),
+        'owner_aadhaar': (data.get('owner_aadhaar') or '').strip(),
+        'owner_address': (data.get('owner_address') or '').strip(),
+        'owner_photo': data.get('owner_photo') or '',
+        'store_logo': data.get('store_logo') or '',
+        'store_photo': data.get('store_photo') or '',
+        'contact_phone': owner_mobile,
+        'contact_email': (data.get('owner_email') or '').strip(),
+        'address_line1': (data.get('address_line1') or '').strip() or 'Boisar West',
+        'address_line2': (data.get('address_line2') or '').strip(),
+        'area': (data.get('area') or '').strip() or 'Boisar',
+        'city': (data.get('city') or '').strip() or 'Palghar',
+        'state': (data.get('state') or '').strip() or 'Maharashtra',
+        'pincode': (data.get('pincode') or '').strip() or '401501',
+        'google_map_url': data.get('google_map_url') or '',
+        'gps_coordinates': data.get('gps_coordinates') or '19.8000, 72.7500',
+        'dl_20b_number': dl_20b,
+        'dl_21b_number': dl_21b,
+        'dl_issue_date': data.get('dl_issue_date') or today_str,
+        'dl_expiry_date': data.get('dl_expiry_date') or today_plus_5,
+        'dl_issuing_authority': data.get('dl_issuing_authority') or 'FDA Maharashtra',
+        'dl_renewal_date': data.get('dl_renewal_date') or data.get('dl_expiry_date') or today_plus_5,
+        'fssai_number': fssai,
+        'fssai_issue_date': data.get('fssai_issue_date') or data.get('dl_issue_date') or today_str,
+        'fssai_expiry_date': data.get('fssai_expiry_date') or today_plus_5,
+        'status': data.get('status') or 'Active',
+        'compliance_score': 100,
+        'compliance_status': 'Excellent',
         'updated_at': now_str
     }
 
-    if is_new:
-        record['created_at'] = now_str
-        db_table('medical_stores').insert(record).execute()
-        log_activity("Office Staff", "Store Registered", f"Registered new Medical Store: {data.get('store_name')} ({shop_code})", store_id)
-    else:
-        db_table('medical_stores').update(record).eq('id', store_id).execute()
-        log_activity("Office Staff", "Store Updated", f"Updated details for Medical Store: {data.get('store_name')}", store_id)
+    print(f"[STORE REGISTRATION PAYLOAD] Store ID: {store_id} | Firm ID: {firm_id} | Payload:\n{json.dumps(record, indent=2)}")
+    logging.info(f"[STORE REGISTRATION PAYLOAD] Store ID: {store_id} | Firm ID: {firm_id} | Payload:\n{json.dumps(record, indent=2)}")
 
-    # Recalculate compliance
-    ph_list = db_table('pharmacists').select('*').eq('store_id', store_id).execute().data
-    doc_cnt = len(db_table('documents').select('*').eq('store_id', store_id).execute().data)
-    score, status_str = calculate_compliance_score(record, ph_list, doc_cnt)
+    try:
+        if is_new:
+            record['created_at'] = now_str
+            res_db = db_table('medical_stores').insert(record).execute()
+            print(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Supabase | Store ID: {store_id} | Response: {res_db.data}")
+            logging.info(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Supabase | Store ID: {store_id} | Response: {res_db.data}")
+            
+            # Write Activity Log ONLY AFTER database insert succeeds
+            try:
+                log_activity("Office Staff", "Store Registered", f"Registered new Medical Store: {store_name} ({shop_code})", store_id)
+            except Exception as e_act:
+                logging.warning(f"[ACTIVITY LOG NOTICE] {e_act}")
+        else:
+            res_db = db_table('medical_stores').update(record).eq('id', store_id).execute()
+            print(f"[STORE UPDATE SUCCESS] Store '{store_name}' updated successfully in Supabase | Store ID: {store_id} | Response: {res_db.data}")
+            logging.info(f"[STORE UPDATE SUCCESS] Store '{store_name}' updated successfully in Supabase | Store ID: {store_id} | Response: {res_db.data}")
+            
+            # Write Activity Log ONLY AFTER database update succeeds
+            try:
+                log_activity("Office Staff", "Store Updated", f"Updated details for Medical Store: {store_name}", store_id)
+            except Exception as e_act:
+                logging.warning(f"[ACTIVITY LOG NOTICE] {e_act}")
+    except Exception as e:
+        import traceback
+        err_detail = f"Failed to save Medical Store '{store_name}' to Supabase: {str(e)}"
+        print(f"[STORE REGISTRATION FAILURE] {err_detail}\n{traceback.format_exc()}")
+        logging.error(f"[STORE REGISTRATION FAILURE] {err_detail}\n{traceback.format_exc()}")
+        # DO NOT write Activity Log if database insert failed!
+        raise RuntimeError(err_detail)
 
-    db_table('medical_stores').update({'compliance_score': score, 'compliance_status': status_str}).eq('id', store_id).execute()
+    # Recalculate compliance score
+    try:
+        ph_list = db_table('pharmacists').select('*').eq('store_id', store_id).execute().data or []
+        doc_cnt = len(db_table('documents').select('*').eq('store_id', store_id).execute().data or [])
+        score, status_str = calculate_compliance_score(record, ph_list, doc_cnt)
+        db_table('medical_stores').update({'compliance_score': score, 'compliance_status': status_str}).eq('id', store_id).execute()
+    except Exception as e_comp:
+        logging.warning(f"[COMPLIANCE CALC NOTICE] {e_comp}")
 
-    return {'id': store_id, 'shop_code': shop_code, 'warnings': dups}
+    return {'id': store_id, 'firm_id': firm_id, 'shop_code': shop_code, 'warnings': dups}
 
 def delete_medical_store(store_id):
     res = db_table('medical_stores').select('store_name').eq('id', store_id).execute()

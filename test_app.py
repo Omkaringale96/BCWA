@@ -262,6 +262,26 @@ class BCWAPortalTestCase(unittest.TestCase):
         self.assertFalse(is_expiry_document('Owner PAN'))
         print("Smart Document Classification Test Passed: Expiry vs Permanent categories correctly identified.")
 
+    def test_store_registration_failure_activity_log_guard(self):
+        from seed_data import clear_production_database
+        from database import get_activity_logs
+        clear_production_database()
+
+        with self.app as c:
+            c.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
+            # Submit invalid store payload missing store_name
+            res = c.post('/api/stores', json={'owner_name': 'Test Owner'})
+            self.assertEqual(res.status_code, 400)
+            data = res.get_json()
+            self.assertFalse(data.get('success'))
+            self.assertIn('Medical Store Name is required', data.get('error', ''))
+
+            # Verify NO activity log entry was created for failed store registration
+            logs = get_activity_logs()
+            reg_logs = [l for l in logs if 'Store Registered' in l.get('action', '')]
+            self.assertEqual(len(reg_logs), 0)
+            print("Store Registration Failure Activity Log Guard Test Passed: Activity Log NOT created on failure.")
+
 if __name__ == '__main__':
     unittest.main()
 
