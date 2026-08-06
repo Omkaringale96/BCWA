@@ -757,7 +757,10 @@ const BCWAApp = {
                     </td>
                     <td>${doc.expiry_date || 'N/A'}</td>
                     <td>
-                        <a href="${doc.file_url}" target="_blank" class="btn btn-secondary btn-sm">Preview</a>
+                        <div style="display:flex; gap:4px;">
+                            <a href="${doc.file_url}" target="_blank" class="btn btn-secondary btn-sm">Preview</a>
+                            <button class="btn btn-secondary btn-sm" onclick="BCWAApp.viewDocumentVersions('${doc.id}')">v${doc.version || 1} Details</button>
+                        </div>
                     </td>
                 </tr>
             `).join('');
@@ -769,6 +772,56 @@ const BCWAApp = {
             lucide.createIcons();
         } catch (err) {
             console.error('Error loading document vault:', err);
+        }
+    },
+
+    async viewDocumentVersions(docId) {
+        try {
+            const res = await fetch(`/api/documents/${docId}/versions`);
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                alert(data.error || 'Failed loading document versions.');
+                return;
+            }
+
+            const current = data.current || {};
+            const versions = data.versions || [];
+
+            const titleEl = document.getElementById('ver-doc-title');
+            const metaEl = document.getElementById('ver-doc-meta');
+            const badgeEl = document.getElementById('ver-doc-badge');
+            const tbody = document.getElementById('tbody-doc-versions');
+
+            if (titleEl) titleEl.textContent = current.title || current.file_name || 'Document Details';
+            if (metaEl) metaEl.textContent = `Firm ID: ${current.firm_id || 'BCWA-MED-000001'} | Category: ${current.category || 'Standard'}`;
+            if (badgeEl) badgeEl.textContent = `v${current.version || 1} (Latest)`;
+
+            if (tbody) {
+                tbody.innerHTML = versions.map(v => `
+                    <tr>
+                        <td><span class="badge ${v.is_latest ? 'badge-primary' : 'badge-secondary'}">v${v.version || 1}</span></td>
+                        <td><strong>${v.file_name || 'document.pdf'}</strong></td>
+                        <td>${v.file_size_kb ? v.file_size_kb + ' KB' : '250 KB'}</td>
+                        <td>${v.uploaded_by || 'Administrator'}</td>
+                        <td><small>${v.upload_time || v.created_at || 'Just now'}</small></td>
+                        <td>
+                            <span class="badge ${v.is_latest ? 'badge-success' : 'badge-info'}">
+                                ${v.is_latest ? 'Active' : 'Archived'}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="${v.file_url}" target="_blank" class="btn btn-sm btn-secondary">
+                                <i data-lucide="download" style="width:14px;"></i> Download
+                            </a>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            openModal('modal-doc-versions');
+            lucide.createIcons();
+        } catch (e) {
+            alert('Error fetching document versions.');
         }
     },
 

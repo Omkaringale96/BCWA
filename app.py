@@ -503,34 +503,133 @@ def api_upload_document():
     title = request.form.get('title', 'Document')
     issue_date = request.form.get('issue_date')
     expiry_date = request.form.get('expiry_date')
+    doc_number = request.form.get('document_number', 'N/A')
     file = request.files.get('file')
 
-    file_name = file.filename if file else 'document.pdf'
-    
+    store = get_medical_store(store_id) if store_id else None
+    firm_id = store.get('firm_id', 'BCWA-MED-000001') if store else 'BCWA-MED-000001'
+
+    # Versioning: Find max version for this store and category
+    existing_docs = []
+    try:
+        existing_docs = db_table('documents').select('*').eq('store_id', store_id).eq('category', category).execute().data or []
+    except Exception:
+        pass
+
+    max_v = 0
+    for d in existing_docs:
+        v = d.get('version', 1)
+        if v > max_v: max_v = v
+
+    new_version = max_v + 1
+    file_name = file.filename if file else f"{category.replace(' ', '_')}_v{new_version}.pdf"
+
+    # Mark previous versions as non-latest
+    for d in existing_docs:
+        try:
+            db_table('documents').update({'is_latest': False}).eq('id', d.get('id')).execute()
+        except Exception:
+            pass
+
     file_url = f"/static/docs/{file_name}"
     size_kb = random.randint(150, 800)
+    mime_type = file.mimetype if file and hasattr(file, 'mimetype') else 'application/pdf'
+    storage_path = f"{firm_id}/{category}/{file_name}"
+    uploaded_by = session.get('user', {}).get('name', 'Administrator')
+    upload_now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     if file and upload_to_supabase_storage:
         file_bytes = file.read()
         size_kb = max(1, int(len(file_bytes) / 1024))
         file.seek(0)
-        s_res = upload_to_supabase_storage(file, file_name, category=category)
+        s_res = upload_to_supabase_storage(file, file_name, category=category, firm_id=firm_id)
         if s_res.get('success'):
             file_url = s_res.get('url')
+            storage_path = s_res.get('path', storage_path)
 
     doc_data = {
         'store_id': store_id,
+        'firm_id': firm_id,
         'category': category,
         'title': title,
+        'document_number': doc_number,
         'file_name': file_name,
         'file_url': file_url,
+        'storage_path': storage_path,
         'file_size_kb': size_kb,
+        'mime_type': mime_type,
+        'upload_time': upload_now_str,
+        'uploaded_by': uploaded_by,
+        'version': new_version,
+        'is_latest': True,
         'issue_date': issue_date,
         'expiry_date': expiry_date
     }
 
     res = save_document(doc_data)
-    return jsonify({'success': True, 'id': res['id'], 'file_url': file_url, 'quality_status': res['quality_status'], 'quality_notes': res['quality_notes']})
+    return jsonify({
+        'success': True,
+        'id': res['id'],
+        'firm_id': firm_id,
+        'version': new_version,
+        'file_url': file_url,
+        'quality_status': res['quality_status'],
+        'quality_notes': res['quality_notes']
+    })
+
+@app.route('/api/documents/<doc_id>/versions', methods=['GET'])
+def api_get_document_versions(doc_id):
+    user = session.get('user')
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        doc_res = db_table('documents').select('*').eq('id', doc_id).execute()
+        if not doc_res.data:
+            return jsonify({'error': 'Document not found'}), 404
+
+        target_doc = doc_res.data[0]
+        store_id = target_doc.get('store_id')
+        category = target_doc.get('category')
+
+        if user.get('role') == 'Store' and user.get('store_id') != store_id:
+            return jsonify({'error': 'Forbidden access to store documents'}), 403
+
+        all_versions = db_table('documents').select('*').eq('store_id', store_id).eq('category', category).order('version', desc=True).execute().data or [target_doc]
+        return jsonify({
+            'success': True,
+            'current': target_doc,
+            'versions': all_versions,
+            'total_versions': len(all_versions)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/documents/<doc_id>/download', methods=['GET'])
+def api_download_document(doc_id):
+    user = session.get('user')
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        doc_res = db_table('documents').select('*').eq('id', doc_id).execute()
+        if not doc_res.data:
+            return jsonify({'error': 'Document not found'}), 404
+
+        target_doc = doc_res.data[0]
+        store_id = target_doc.get('store_id')
+
+        if user.get('role') == 'Store' and user.get('store_id') != store_id:
+            return jsonify({'error': 'Forbidden access to store documents'}), 403
+
+        file_url = target_doc.get('file_url') or '/static/docs/sample.pdf'
+        return jsonify({
+            'success': True,
+            'document': target_doc,
+            'download_url': file_url
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/documents/<doc_id>', methods=['DELETE'])
 def api_delete_document(doc_id):

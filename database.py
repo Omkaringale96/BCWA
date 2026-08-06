@@ -293,6 +293,18 @@ def resend_notification_log(log_id):
 
     return ok, err_msg
 
+def ensure_firm_id(store_dict):
+    if not store_dict:
+        return store_dict
+    if not store_dict.get('firm_id'):
+        s_id = str(store_dict.get('id', '1')).replace('MS-10', '').replace('MS-', '')
+        try:
+            num = int(s_id)
+        except Exception:
+            num = 1
+        store_dict['firm_id'] = f"BCWA-MED-{num:06d}"
+    return store_dict
+
 def get_medical_stores(query=None, compliance=None, status=None, page=None, limit=25):
     stores = db_table('medical_stores').select('*').order('created_at', desc=True).execute().data or []
     pharmacists = db_table('pharmacists').select('*').execute().data or []
@@ -300,7 +312,7 @@ def get_medical_stores(query=None, compliance=None, status=None, page=None, limi
     result = []
     for s in stores:
         ph_count = sum(1 for p in pharmacists if p.get('store_id') == s.get('id'))
-        s_copy = dict(s)
+        s_copy = ensure_firm_id(dict(s))
         s_copy['pharmacist_count'] = ph_count
 
         if status and s_copy.get('status') != status:
@@ -312,6 +324,7 @@ def get_medical_stores(query=None, compliance=None, status=None, page=None, limi
             q = query.strip().lower()
             match = (
                 q in s_copy.get('store_name', '').lower() or
+                q in s_copy.get('firm_id', '').lower() or
                 q in s_copy.get('shop_code', '').lower() or
                 q in s_copy.get('owner_name', '').lower() or
                 q in s_copy.get('owner_mobile', '').lower() or
@@ -345,7 +358,7 @@ def get_medical_store(store_id):
     if not res.data:
         return None
 
-    store = dict(res.data[0])
+    store = ensure_firm_id(dict(res.data[0]))
     ph_res = db_table('pharmacists').select('*').eq('store_id', store_id).execute()
     doc_res = db_table('documents').select('*').eq('store_id', store_id).execute()
 

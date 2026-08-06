@@ -1,11 +1,12 @@
 import logging
 import email_service
-import whatsapp_service
+# import whatsapp_service  # WHATSAPP MODULE TEMPORARILY DISABLED IN PHASE 2
 
 def send(notification_payload):
     """
-    Multi-channel notification dispatcher routing to Email (Brevo SMTP)
-    and WhatsApp (Meta Cloud API / Twilio / CallMeBot / wa.me).
+    Multi-channel notification dispatcher.
+    PHASE 2 UPDATE: WhatsApp module is temporarily disabled.
+    All notification dispatches route exclusively via Brevo SMTP Email engine.
     """
     channel = str(notification_payload.get('channel', 'email')).lower()
     recipient_email = notification_payload.get('recipient_email') or 'bhosalevinayakwe@gmail.com'
@@ -17,26 +18,19 @@ def send(notification_payload):
     doc_type = notification_payload.get('document_type', 'Document')
     days_remaining = notification_payload.get('days_remaining', 0)
 
-    email_success, email_msg = False, "Email not selected"
-    wa_success, wa_msg = False, "WhatsApp not selected"
+    # 1. Dispatch Email exclusively (WhatsApp temporarily disabled in Phase 2)
+    email_success, email_msg = email_service.send_html_email(recipient_email, subject, html_body)
 
-    # 1. Dispatch Email if channel is 'email' or 'both'
-    if channel in ['email', 'both']:
-        email_success, email_msg = email_service.send_html_email(recipient_email, subject, html_body)
+    # =========================================================================
+    # WHATSAPP ARCHITECTURE (PRESERVED - COMMENTED OUT FOR FUTURE RE-ENABLING)
+    # =========================================================================
+    # if channel in ['whatsapp', 'both']:
+    #     wa_success, wa_msg = whatsapp_service.send_whatsapp_reminder(
+    #         to_mobile=recipient_mobile,
+    #         store_name=store_name,
+    #         document_type=doc_type,
+    #         days_remaining=days_remaining
+    #     )
 
-    # 2. Dispatch WhatsApp if channel is 'whatsapp' or 'both'
-    if channel in ['whatsapp', 'both']:
-        wa_success, wa_msg = whatsapp_service.send_whatsapp_reminder(
-            to_mobile=recipient_mobile,
-            store_name=store_name,
-            document_type=doc_type,
-            days_remaining=days_remaining
-        )
-
-    if channel == 'whatsapp':
-        return wa_success, wa_msg
-    elif channel == 'both':
-        overall_ok = email_success or wa_success
-        return overall_ok, f"Email: {email_msg} | WhatsApp: {wa_msg}"
-    else:
-        return email_success, email_msg
+    logging.info(f"[NOTIFICATION SERVICE] Email dispatch to {recipient_email}: {email_msg}")
+    return email_success, email_msg

@@ -22,74 +22,119 @@ def match_reminder_stage(days_remaining):
         return days_remaining
     return None
 
-def generate_reminder_html_email(recipient_name, store_name, doc_name, doc_num, expiry_date_str, days_remaining, pharmacist_name=None, issue_date_str="As Per Records"):
+def generate_reminder_html_email(recipient_name, store_name, doc_name, doc_num, expiry_date_str, days_remaining, firm_id="BCWA-MED-000001", pharmacist_name=None, issue_date_str="As Per Records"):
     is_expired = days_remaining <= 0
     badge_bg = '#DC2626' if is_expired else ('#EA580C' if days_remaining <= 15 else '#2563EB')
-    status_text = f"EXPIRED ({abs(days_remaining)} Days Ago)" if is_expired else (f"Expires Tomorrow" if days_remaining == 1 else f"Expires in {days_remaining} Days")
+    status_text = f"EXPIRED ({abs(days_remaining)} Days Ago)" if is_expired else (f"Expires Tomorrow" if days_remaining == 1 else f"{days_remaining} Days Remaining")
 
-    ph_row = f"<tr><td style='padding:8px 0; color:#6B7280; font-weight:600;'>Assigned Pharmacist:</td><td style='padding:8px 0; font-weight:700; color:#1F2937;'>{pharmacist_name}</td></tr>" if pharmacist_name else ""
+    ph_row = f"<tr><td style='padding:10px 12px; color:#64748B; font-weight:600;'>Assigned Pharmacist:</td><td style='padding:10px 12px; font-weight:700; color:#1E293B;'>{pharmacist_name}</td></tr>" if pharmacist_name else ""
 
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>BCWA Compliance Reminder</title>
         <style>
-            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F3F4F6; margin: 0; padding: 0; }}
-            .email-container {{ max-width: 600px; margin: 20px auto; background: #FFFFFF; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }}
-            .header {{ background-color: #1E3A8A; padding: 24px; text-align: center; color: #FFFFFF; }}
-            .header h1 {{ margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }}
-            .header p {{ margin: 4px 0 0 0; font-size: 13px; opacity: 0.9; }}
-            .content {{ padding: 30px; }}
-            .badge {{ display: inline-block; background-color: {badge_bg}; color: #FFFFFF; padding: 6px 16px; border-radius: 50px; font-size: 14px; font-weight: 700; margin-bottom: 20px; }}
-            .details-table {{ width: 100%; border-collapse: collapse; margin: 20px 0; border-top: 1px solid #E5E7EB; border-bottom: 1px solid #E5E7EB; }}
-            .action-box {{ background-color: #EFF6FF; border-left: 4px solid #2563EB; padding: 16px; border-radius: 4px; margin: 20px 0; }}
-            .footer {{ background-color: #F8FAFC; padding: 20px; text-align: center; font-size: 12px; color: #64748B; border-top: 1px solid #E2E8F0; }}
+            body {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #F8FAFC; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }}
+            .email-wrapper {{ width: 100%; background-color: #F8FAFC; padding: 32px 16px; }}
+            .email-card {{ max-width: 600px; margin: 0 auto; background: #FFFFFF; border-radius: 16px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }}
+            .email-header {{ background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%); padding: 32px 24px; text-align: center; color: #FFFFFF; }}
+            .header-logo {{ display: inline-block; width: 48px; height: 48px; background: rgba(255,255,255,0.15); border-radius: 12px; line-height: 48px; font-size: 24px; font-weight: 700; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.25); }}
+            .email-header h1 {{ margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }}
+            .email-header p {{ margin: 4px 0 0 0; font-size: 13px; opacity: 0.9; font-weight: 500; }}
+            .email-body {{ padding: 32px; }}
+            .greeting {{ font-size: 17px; font-weight: 700; color: #0F172A; margin-bottom: 8px; }}
+            .intro-text {{ color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 24px; }}
+            .status-badge {{ display: inline-block; background-color: {badge_bg}; color: #FFFFFF; padding: 6px 18px; border-radius: 9999px; font-size: 13px; font-weight: 700; letter-spacing: 0.3px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            .info-card {{ background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; margin: 24px 0; padding: 6px 12px; }}
+            .info-table {{ width: 100%; border-collapse: collapse; }}
+            .info-table td {{ border-bottom: 1px solid #E2E8F0; font-size: 13px; }}
+            .info-table tr:last-child td {{ border-bottom: none; }}
+            .action-box {{ background-color: #EFF6FF; border-left: 4px solid #2563EB; border-radius: 8px; padding: 18px; margin: 24px 0; }}
+            .action-box h4 {{ margin: 0 0 6px 0; color: #1E40AF; font-size: 14px; font-weight: 700; }}
+            .action-box p {{ margin: 0; color: #1E3A8A; font-size: 13px; line-height: 1.5; }}
+            .btn-group {{ margin: 28px 0 12px 0; text-align: center; }}
+            .btn-primary {{ display: inline-block; background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%); color: #FFFFFF !important; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-weight: 600; font-size: 14px; margin: 4px; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25); }}
+            .btn-secondary {{ display: inline-block; background: #F1F5F9; color: #334155 !important; text-decoration: none; padding: 12px 20px; border-radius: 10px; font-weight: 600; font-size: 14px; margin: 4px; border: 1px solid #CBD5E1; }}
+            .email-footer {{ background-color: #F1F5F9; padding: 24px; text-align: center; font-size: 12px; color: #64748B; border-top: 1px solid #E2E8F0; line-height: 1.6; }}
+            .email-footer a {{ color: #2563EB; text-decoration: none; font-weight: 600; }}
         </style>
     </head>
     <body>
-        <div class="email-container">
-            <div class="header">
-                <h1>BOISAR WELFARE CHEMIST ASSOCIATION</h1>
-                <p>Official Compliance & Document Renewal Center</p>
-            </div>
-
-            <div class="content">
-                <p style="font-size: 16px; color: #1F2937;">Dear <strong>{recipient_name}</strong>,</p>
-                
-                <p style="color: #4B5563; line-height: 1.6;">
-                    This is an official automated compliance alert regarding your document registration for <strong>{store_name}</strong>.
-                </p>
-
-                <div style="text-align: center;">
-                    <span class="badge">{status_text}</span>
+        <div class="email-wrapper">
+            <div class="email-card">
+                <div class="email-header">
+                    <div class="header-logo">✚</div>
+                    <h1>BOISAR WELFARE CHEMIST ASSOCIATION</h1>
+                    <p>Compliance Management Portal</p>
                 </div>
 
-                <table class="details-table">
-                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600; width:40%;">Medical Store:</td><td style="padding:8px 0; font-weight:700; color:#1F2937;">{store_name}</td></tr>
-                    {ph_row}
-                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">Document Category:</td><td style="padding:8px 0; font-weight:700; color:#2563EB;">{doc_name}</td></tr>
-                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">License / Doc No:</td><td style="padding:8px 0; font-weight:700; color:#1F2937;">{doc_num}</td></tr>
-                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">Issue Date:</td><td style="padding:8px 0; font-weight:500; color:#4B5563;">{issue_date_str}</td></tr>
-                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">Expiry Date:</td><td style="padding:8px 0; font-weight:700; color:#DC2626;">{expiry_date_str}</td></tr>
-                    <tr><td style="padding:8px 0; color:#6B7280; font-weight:600;">Remaining Days:</td><td style="padding:8px 0; font-weight:700; color:#1F2937;">{days_remaining} Days</td></tr>
-                </table>
+                <div class="email-body">
+                    <div class="greeting">Dear {recipient_name},</div>
+                    <p class="intro-text">
+                        This is an automated compliance reminder from the <strong>Boisar Welfare Chemist Association (BCWA)</strong>. Our records indicate that the following registered document is approaching its mandatory regulatory expiry date.
+                    </p>
 
-                <div class="action-box">
-                    <h4 style="margin: 0 0 8px 0; color: #1E40AF;">Mandatory Action Required:</h4>
-                    <p style="margin: 0; font-size: 13px; color: #1E3A8A; line-height: 1.5;">
-                        Please initiate your renewal process immediately via the official regulatory portal (FDA / MSPC) and upload your renewed certificate to the BCWA Document Vault to ensure uninterrupted operations.
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <span class="status-badge">{status_text}</span>
+                    </div>
+
+                    <div class="info-card">
+                        <table class="info-table">
+                            <tr>
+                                <td style="padding:10px 12px; color:#64748B; font-weight:600; width:40%;">Medical Store:</td>
+                                <td style="padding:10px 12px; font-weight:700; color:#0F172A;">{store_name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 12px; color:#64748B; font-weight:600;">Firm ID:</td>
+                                <td style="padding:10px 12px; font-weight:700; color:#2563EB;">{firm_id}</td>
+                            </tr>
+                            {ph_row}
+                            <tr>
+                                <td style="padding:10px 12px; color:#64748B; font-weight:600;">Document Category:</td>
+                                <td style="padding:10px 12px; font-weight:700; color:#1E293B;">{doc_name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 12px; color:#64748B; font-weight:600;">Document Number:</td>
+                                <td style="padding:10px 12px; font-weight:700; color:#0F172A;">{doc_num}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 12px; color:#64748B; font-weight:600;">Expiry Date:</td>
+                                <td style="padding:10px 12px; font-weight:700; color:#DC2626;">{expiry_date_str}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px 12px; color:#64748B; font-weight:600;">Days Remaining:</td>
+                                <td style="padding:10px 12px; font-weight:700; color:#0F172A;">{days_remaining} Days</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div class="action-box">
+                        <h4>Regulatory Compliance Required</h4>
+                        <p>
+                            Please initiate the renewal process before the expiry date to ensure uninterrupted compliance with Food & Drugs Administration (FDA) and BCWA regulatory guidelines.
+                        </p>
+                    </div>
+
+                    <div class="btn-group">
+                        <a href="https://bcwa.onrender.com" class="btn-primary" target="_blank">View Portal</a>
+                        <a href="mailto:support@bcwaportal.in" class="btn-secondary">Contact BCWA</a>
+                    </div>
+                </div>
+
+                <div class="email-footer">
+                    <p style="margin:0 0 4px 0; font-weight:700; color:#334155;">Boisar Welfare Chemist Association (BCWA)</p>
+                    <p style="margin:0 0 8px 0;">Official Compliance Management Portal &bull; Boisar West, Palghar</p>
+                    <p style="margin:0;">
+                        Support: <a href="mailto:support@bcwaportal.in">support@bcwaportal.in</a> &bull; 
+                        Portal: <a href="https://bcwa.onrender.com" target="_blank">bcwa.onrender.com</a>
+                    </p>
+                    <p style="margin-top:12px; font-size:11px; color:#94A3B8;">
+                        This is an automated system notification. Please do not reply directly to this email.
                     </p>
                 </div>
-
-                <p style="font-size: 13px; color: #6B7280; margin-top: 24px;">
-                    Need assistance? Contact BCWA Support Desk at <a href="mailto:support@bcwaportal.in" style="color:#2563EB;">support@bcwaportal.in</a> or visit the association office in Boisar West.
-                </p>
-            </div>
-
-            <div class="footer">
-                <p>&copy; 2026 Boisar Welfare Chemist Association (BCWA). All Rights Reserved.</p>
-                <p>This is an automated compliance notification. Please do not reply directly.</p>
             </div>
         </div>
     </body>
@@ -241,7 +286,8 @@ def scan_and_queue_expiring_reminders():
                     if not is_duplicate_queue_item(store_id, 'Drug License', stage):
                         doc_num = f"{s.get('dl_20b_number', '')} / {s.get('dl_21b_number', '')}"
                         subject = generate_email_subject('Drug License', stage)
-                        html = generate_reminder_html_email(owner_name, store_name, 'Drug License', doc_num, dl_expiry_str, stage)
+                        firm_id = s.get('firm_id') or f"BCWA-MED-000001"
+                        html = generate_reminder_html_email(owner_name, store_name, 'Drug License', doc_num, dl_expiry_str, stage, firm_id=firm_id)
                         
                         owner_mobile = s.get('owner_mobile') or s.get('contact_phone') or '8766759824'
                         queue_payload = {
@@ -282,7 +328,8 @@ def scan_and_queue_expiring_reminders():
                     if not is_duplicate_queue_item(store_id, 'Food License (FSSAI)', stage):
                         doc_num = s.get('fssai_number', 'N/A')
                         subject = generate_email_subject('Food License (FSSAI)', stage)
-                        html = generate_reminder_html_email(owner_name, store_name, 'Food License (FSSAI)', doc_num, fssai_expiry_str, stage)
+                        firm_id = s.get('firm_id') or f"BCWA-MED-000001"
+                        html = generate_reminder_html_email(owner_name, store_name, 'Food License (FSSAI)', doc_num, fssai_expiry_str, stage, firm_id=firm_id)
 
                         owner_mobile = s.get('owner_mobile') or s.get('contact_phone') or '8766759824'
                         queue_payload = {

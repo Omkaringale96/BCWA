@@ -654,10 +654,11 @@
                             <p class="text-secondary">Role-based access control for Administrators, Office Staff, and Read Only Auditors.</p>
                         </div>
                         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <button class="btn btn-secondary btn-sm" id="btn-send-test-email" onclick="BCWAApp.sendTestEmail()">
+                            <button class="btn class-secondary btn-sm" id="btn-send-test-email" onclick="BCWAApp.sendTestEmail()">
                                 <i data-lucide="mail"></i>
                                 <span>Test Email</span>
                             </button>
+                            <!-- WHATSAPP TEST BUTTONS (TEMPORARILY DISABLED IN PHASE 2)
                             <button class="btn btn-secondary btn-sm" id="btn-send-test-whatsapp" onclick="BCWAApp.sendTestWhatsApp()">
                                 <i data-lucide="message-square"></i>
                                 <span>Test WhatsApp</span>
@@ -666,6 +667,7 @@
                                 <i data-lucide="send"></i>
                                 <span>Test Both Channels</span>
                             </button>
+                            -->
                             <button class="btn btn-primary btn-sm" id="btn-add-user">
                                 <i data-lucide="user-plus"></i>
                                 <span>Add System User</span>
@@ -1125,6 +1127,47 @@
                     <i data-lucide="download"></i>
                     <span>Generate &amp; Download PDF</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DOCUMENT VERSION HISTORY & PREVIEW MODAL -->
+    <div class="modal-overlay" id="modal-doc-versions">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3><i data-lucide="history" style="width:20px; height:20px; color:#2563EB;"></i> Document Details &amp; Version History</h3>
+                <button class="btn-close" onclick="closeModal('modal-doc-versions')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="card mb-3" style="background:#F8FAFC; border:1px solid #E2E8F0; padding:16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h4 id="ver-doc-title" style="margin:0; font-size:16px; color:#0F172A;">Document Title</h4>
+                            <p class="text-secondary" style="margin:2px 0 0 0; font-size:12px;" id="ver-doc-meta">Firm ID: BCWA-MED-000001 | Category: Drug License</p>
+                        </div>
+                        <span class="badge badge-primary" id="ver-doc-badge">v1 (Latest)</span>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table" id="table-doc-versions">
+                        <thead>
+                            <tr>
+                                <th>Version</th>
+                                <th>File Name</th>
+                                <th>Size</th>
+                                <th>Uploaded By</th>
+                                <th>Upload Time</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-doc-versions"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-doc-versions')">Close</button>
             </div>
         </div>
     </div>

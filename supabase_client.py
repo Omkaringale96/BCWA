@@ -366,23 +366,48 @@ class SupabaseResponse:
 def db_table(table_name):
     return SupabaseTableProxy(table_name)
 
-def upload_to_supabase_storage(file_obj, filename, category="Other Documents"):
+def resolve_storage_bucket_and_path(firm_id, category, filename, pharmacist_name=None):
+    firm_folder = (firm_id or 'BCWA-MED-000001').strip().upper()
+    cat = (category or 'Other').strip()
+    cat_lower = cat.lower()
+
+    if any(k in cat_lower for k in ['drug', 'food', 'fssai', 'rent', 'electricity', 'light', 'gst', 'shop act', 'namuna', 'cold storage', 'tax']):
+        bucket_name = 'store-documents'
+        file_path = f"{firm_folder}/{cat}/{filename}"
+    elif any(k in cat_lower for k in ['aadhaar', 'pan', 'photo', 'owner']):
+        bucket_name = 'owner-documents'
+        file_path = f"{firm_folder}/{cat}/{filename}"
+    elif any(k in cat_lower for k in ['pharmacist', 'ppp', 'degree', 'registration', 'appointment', 'qualification']):
+        bucket_name = 'pharmacist-documents'
+        ph_folder = pharmacist_name if pharmacist_name else "Pharmacist-01"
+        file_path = f"{firm_folder}/{ph_folder}/{cat}/{filename}"
+    elif 'inspection' in cat_lower:
+        bucket_name = 'inspection-reports'
+        file_path = f"{firm_folder}/{filename}"
+    else:
+        bucket_name = 'other-documents'
+        file_path = f"{firm_folder}/{filename}"
+
+    return bucket_name, file_path
+
+def upload_to_supabase_storage(file_obj, filename, category="Other Documents", firm_id="BCWA-MED-000001", pharmacist_name=None):
     """
-    Uploads a document to designated Supabase Storage Bucket:
-    - store-documents
-    - owner-documents
-    - pharmacist-documents
-    - inspection-reports
-    - other-documents
+    Uploads a document to designated Supabase Storage Bucket hierarchy by Firm ID:
+    - store-documents/BCWA-MED-000001/Drug License/<filename>
+    - owner-documents/BCWA-MED-000001/Owner Aadhaar/<filename>
+    - pharmacist-documents/BCWA-MED-000001/Pharmacist-01/PPP Card/<filename>
+    - inspection-reports/BCWA-MED-000001/<filename>
+    - other-documents/BCWA-MED-000001/<filename>
     """
-    bucket_name = BUCKET_MAP.get(category, 'other-documents')
+    bucket_name, file_path = resolve_storage_bucket_and_path(firm_id, category, filename, pharmacist_name)
     client = get_supabase_client()
-    file_path = f"{category}/{filename}"
 
     if client:
         try:
             if hasattr(file_obj, 'read'):
                 content = file_obj.read()
+                if hasattr(file_obj, 'seek'):
+                    file_obj.seek(0)
             else:
                 content = file_obj
 
@@ -401,7 +426,6 @@ def upload_to_supabase_storage(file_obj, filename, category="Other Documents"):
             }
         except Exception as e:
             logging.error(f"Supabase Storage upload error for bucket {bucket_name}: {e}")
-            logging.error(traceback.format_exc())
 
     url, _ = get_supabase_credentials()
     base_url = url if url else "https://your-project.supabase.co"

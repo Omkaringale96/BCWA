@@ -71,6 +71,7 @@ def generate_seed_data():
 
     for i in range(1, 21):
         store_id = f"MS-10{i:02d}"
+        firm_id = f"BCWA-MED-{i:06d}"
         shop_code = f"BCWA-BSR-{100 + i}"
         store_name = f"{STORE_PREFIXES[(i-1) % len(STORE_PREFIXES)]} {STORE_SUFFIXES[(i-1) % len(STORE_SUFFIXES)]}"
         owner_name = f"{FIRST_NAMES[(i*2) % len(FIRST_NAMES)]} {LAST_NAMES[(i*3) % len(LAST_NAMES)]}"
@@ -92,6 +93,7 @@ def generate_seed_data():
 
         st_obj = {
             'id': store_id,
+            'firm_id': firm_id,
             'store_name': store_name,
             'shop_code': shop_code,
             'business_type': "Retail Pharmacy" if i % 4 != 0 else "Wholesale Chemist",
