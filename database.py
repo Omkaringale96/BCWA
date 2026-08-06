@@ -843,91 +843,9 @@ def save_document(data):
 
     return {'id': doc_id, 'quality_status': quality_status, 'quality_notes': quality_notes}
 
-def delete_document(doc_id, user_name="Administrator"):
-    try:
-        doc_res = db_table('documents').select('*').eq('id', doc_id).execute()
-        if doc_res.data:
-            d = doc_res.data[0]
-            storage_path = d.get('storage_path')
-            title = d.get('title') or d.get('file_name') or doc_id
-            store_id = d.get('store_id')
-            if storage_path:
-                from supabase_client import delete_from_supabase_storage
-                delete_from_supabase_storage(storage_path)
-
-            db_table('documents').delete().eq('id', doc_id).execute()
-            log_activity(user_name, "DELETE_DOCUMENT", f"Deleted document '{title}' (ID: {doc_id}) for Store '{store_id}'", store_id)
-            return True
-    except Exception as e:
-        logging.error(f"Failed to delete document {doc_id}: {e}")
-    return False
-
-def update_document_metadata(doc_id, update_fields, user_name="Administrator"):
-    try:
-        doc_res = db_table('documents').select('*').eq('id', doc_id).execute()
-        if not doc_res.data:
-            return None
-        d = doc_res.data[0]
-
-        update_fields['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        db_table('documents').update(update_fields).eq('id', doc_id).execute()
-
-        if 'expiry_date' in update_fields or 'issue_date' in update_fields:
-            try:
-                import threading
-                from notification_engine import run_reminder_engine
-                threading.Thread(target=run_reminder_engine, daemon=True).start()
-            except Exception:
-                pass
-
-        log_activity(user_name, "UPDATE_DOCUMENT", f"Updated metadata for document '{d.get('title')}' (ID: {doc_id})", d.get('store_id'))
-        return doc_id
-    except Exception as e:
-        logging.error(f"Failed updating document {doc_id}: {e}")
-        return None
-
-def replace_document_file(doc_id, file_obj, filename, user_name="Administrator"):
-    try:
-        doc_res = db_table('documents').select('*').eq('id', doc_id).execute()
-        if not doc_res.data:
-            return None
-        d = doc_res.data[0]
-
-        old_storage_path = d.get('storage_path')
-        firm_id = d.get('firm_id') or 'BCWA-MED-000001'
-        category = d.get('category') or 'Other Documents'
-        old_version = d.get('version', 1)
-        new_version = old_version + 1
-
-        if old_storage_path:
-            from supabase_client import delete_from_supabase_storage
-            delete_from_supabase_storage(old_storage_path)
-
-        from supabase_client import upload_to_supabase_storage
-        s_res = upload_to_supabase_storage(file_obj, filename, category=category, firm_id=firm_id)
-
-        file_bytes = file_obj.read() if hasattr(file_obj, 'read') else file_obj
-        size_kb = max(1, int(len(file_bytes) / 1024))
-        if hasattr(file_obj, 'seek'):
-            file_obj.seek(0)
-
-        update_data = {
-            'file_name': filename,
-            'file_url': s_res.get('url'),
-            'storage_path': s_res.get('path'),
-            'file_size_kb': size_kb,
-            'version': new_version,
-            'upload_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'uploaded_by': user_name,
-            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-
-        db_table('documents').update(update_data).eq('id', doc_id).execute()
-        log_activity(user_name, "REPLACE_DOCUMENT", f"Replaced file for document '{d.get('title')}' (ID: {doc_id}) to v{new_version}", d.get('store_id'))
-        return doc_id
-    except Exception as e:
-        logging.error(f"Failed replacing file for document {doc_id}: {e}")
-        return None
+def delete_document(doc_id):
+    db_table('documents').delete().eq('id', doc_id).execute()
+    return True
 
 def get_renewal_calendar_events():
     events = []

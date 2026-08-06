@@ -17,7 +17,7 @@ class BaseConfig:
     SUPABASE_URL = (os.environ.get('SUPABASE_URL') or '').strip().strip('"').strip("'")
     SUPABASE_ANON_KEY = (os.environ.get('SUPABASE_ANON_KEY') or '').strip().strip('"').strip("'")
     SUPABASE_SERVICE_KEY = (os.environ.get('SUPABASE_SERVICE_KEY') or os.environ.get('SUPABASE_KEY') or '').strip().strip('"').strip("'")
-    SUPABASE_STORAGE_BUCKET = os.environ.get('SUPABASE_STORAGE_BUCKET', 'bcwa-documents')
+    SUPABASE_STORAGE_BUCKET = os.environ.get('SUPABASE_STORAGE_BUCKET', 'documents')
 
 class DevelopmentConfig(BaseConfig):
     ENV = 'development'

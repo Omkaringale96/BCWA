@@ -404,10 +404,9 @@ class SupabaseResponse:
 def db_table(table_name):
     return SupabaseTableProxy(table_name)
 
-STORAGE_BUCKET = (os.environ.get('SUPABASE_STORAGE_BUCKET') or 'bcwa-documents').strip()
-DEFAULT_STORAGE_BUCKET = STORAGE_BUCKET
+DEFAULT_STORAGE_BUCKET = os.environ.get('SUPABASE_STORAGE_BUCKET', 'documents')
 
-def ensure_storage_bucket(bucket_name=STORAGE_BUCKET):
+def ensure_storage_bucket(bucket_name=DEFAULT_STORAGE_BUCKET):
     """
     Checks if the specified Supabase Storage Bucket exists.
     If missing, attempts to auto-create it with public accessibility.
@@ -431,42 +430,22 @@ def ensure_storage_bucket(bucket_name=STORAGE_BUCKET):
 
 def resolve_storage_bucket_and_path(firm_id, category, filename, pharmacist_name=None):
     firm_folder = (firm_id or 'BCWA-MED-000001').strip().upper()
-    cat = (category or 'Other').strip()
-    cat_lower = cat.lower()
+    cat = (category or 'Other Documents').strip()
     clean_filename = os.path.basename(filename or 'document.pdf')
 
-    if 'drug' in cat_lower or '20b' in cat_lower or '21b' in cat_lower:
-        cat_dir = 'DrugLicense'
-    elif 'food' in cat_lower or 'fssai' in cat_lower:
-        cat_dir = 'FoodLicense'
-    elif 'ppp' in cat_lower or 'pharmacist' in cat_lower:
-        cat_dir = 'PPP'
-    elif 'aadhaar' in cat_lower:
-        cat_dir = 'Aadhaar'
-    elif 'pan' in cat_lower:
-        cat_dir = 'PAN'
-    elif 'rent' in cat_lower:
-        cat_dir = 'RentAgreement'
-    elif 'electricity' in cat_lower or 'light' in cat_lower:
-        cat_dir = 'ElectricityBill'
-    elif 'cold' in cat_lower:
-        cat_dir = 'ColdStorage'
-    elif 'photo' in cat_lower or 'logo' in cat_lower:
-        cat_dir = 'ShopPhotos'
-    elif 'owner' in cat_lower:
-        cat_dir = 'Owner'
+    if pharmacist_name:
+        file_path = f"{firm_folder}/Pharmacists/{pharmacist_name}/{cat}/{clean_filename}"
     else:
-        cat_dir = 'Other'
+        file_path = f"{firm_folder}/{cat}/{clean_filename}"
 
-    file_path = f"MedicalStores/{firm_folder}/{cat_dir}/{clean_filename}"
-    return STORAGE_BUCKET, file_path
+    return DEFAULT_STORAGE_BUCKET, file_path
 
-def generate_document_preview_url(file_path, bucket_name=STORAGE_BUCKET):
+def generate_document_preview_url(file_path, bucket_name=DEFAULT_STORAGE_BUCKET):
     """Generates public or signed URL for previewing document from Supabase Storage."""
     client = get_supabase_client()
     url_res, _ = get_supabase_credentials()
     base_url = (url_res or "https://your-project.supabase.co").rstrip('/')
-    bucket = bucket_name or STORAGE_BUCKET
+    bucket = bucket_name or DEFAULT_STORAGE_BUCKET
 
     preview_url = f"{base_url}/storage/v1/object/public/{bucket}/{file_path}"
 
@@ -495,9 +474,9 @@ def generate_document_preview_url(file_path, bucket_name=STORAGE_BUCKET):
 
 def upload_to_supabase_storage(file_obj, filename, category="Other Documents", firm_id="BCWA-MED-000001", pharmacist_name=None):
     """
-    Uploads a document to single unified Supabase Storage Bucket ('bcwa-documents'):
-    - bcwa-documents/MedicalStores/BCWA-MED-000001/DrugLicense/<filename>
-    - bcwa-documents/MedicalStores/BCWA-MED-000001/PPP/<filename>
+    Uploads a document to single unified Supabase Storage Bucket ('documents'):
+    - documents/BCWA-MED-000001/Drug License/<filename>
+    - documents/BCWA-MED-000001/Pharmacists/Rahul/PPP Card/<filename>
     """
     bucket_name, file_path = resolve_storage_bucket_and_path(firm_id, category, filename, pharmacist_name)
     client = get_supabase_client()
@@ -560,23 +539,3 @@ def upload_to_supabase_storage(file_obj, filename, category="Other Documents", f
         'bucket': bucket_name,
         'path': file_path
     }
-
-def delete_from_supabase_storage(file_path, bucket_name=STORAGE_BUCKET):
-    """Deletes an object from the specified Supabase Storage Bucket."""
-    if not file_path:
-        return True
-    client = get_supabase_client()
-    bucket = bucket_name or STORAGE_BUCKET
-    if client:
-        try:
-            client.storage.from_(bucket).remove([file_path])
-            logging.info(f"[SUPABASE STORAGE DELETE SUCCESS]\n"
-                         f"  • Destination: Supabase Storage\n"
-                         f"  • Bucket Name: {bucket}\n"
-                         f"  • File Path: {file_path}")
-            return True
-        except Exception as e:
-            logging.error(f"[SUPABASE STORAGE DELETE FAILURE] Bucket '{bucket}' | Path '{file_path}': {e}")
-            logging.error(traceback.format_exc())
-            return False
-    return True

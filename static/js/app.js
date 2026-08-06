@@ -793,7 +793,6 @@ const BCWAApp = {
                         <div style="display:flex; gap:8px; align-items:center;">
                             <a href="/api/documents/${doc.id}/preview" target="_blank" class="action-btn btn-action-preview"><i data-lucide="eye"></i> Preview</a>
                             <button class="action-btn btn-action-resend" onclick="BCWAApp.viewDocumentVersions('${doc.id}')"><i data-lucide="history"></i> v${doc.version || 1} Details</button>
-                            <button class="action-btn btn-action-delete" onclick="BCWAApp.deleteDocument('${doc.id}')" title="Delete Document"><i data-lucide="trash-2"></i> Delete</button>
                         </div>
                     </td>
                 </tr>
@@ -806,25 +805,6 @@ const BCWAApp = {
             lucide.createIcons();
         } catch (err) {
             console.error('Error loading document vault:', err);
-        }
-    },
-
-    async deleteDocument(docId) {
-        if (!confirm('Are you sure you want to delete this document? This will remove the file from Supabase Storage permanently.')) {
-            return;
-        }
-        try {
-            const res = await fetch(`/api/documents/${docId}`, { method: 'DELETE' });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                this.loadDocumentVault();
-                this.loadDashboardStats();
-            } else {
-                alert(data.error || 'Failed to delete document.');
-            }
-        } catch (e) {
-            console.error('Delete document error:', e);
-            alert('An error occurred while deleting document.');
         }
     },
 
@@ -863,11 +843,8 @@ const BCWAApp = {
                             </span>
                         </td>
                         <td>
-                            <a href="/api/documents/${v.id}/preview" target="_blank" class="action-btn btn-action-preview">
-                                <i data-lucide="eye"></i> Preview
-                            </a>
-                            <a href="/api/documents/${v.id}/download" class="action-btn btn-action-download">
-                                <i data-lucide="download"></i> Download
+                            <a href="${v.file_url}" target="_blank" class="action-btn btn-action-download">
+                                <i data-lucide="download"></i> Download PDF
                             </a>
                         </td>
                     </tr>

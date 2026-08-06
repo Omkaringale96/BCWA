@@ -13,7 +13,7 @@ from database import (
     init_db, get_dashboard_stats, get_medical_stores, get_medical_store,
     save_medical_store, delete_medical_store, get_pharmacists, save_pharmacist,
     transfer_pharmacist, delete_pharmacist, get_documents, save_document,
-    delete_document, update_document_metadata, replace_document_file, get_renewal_calendar_events, get_notifications,
+    delete_document, get_renewal_calendar_events, get_notifications,
     mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates,
     log_activity, get_notification_logs, get_notification_log_by_id, resend_notification_log,
     get_notification_queue, get_notification_queue_item_by_id,
@@ -845,41 +845,10 @@ def api_download_document(doc_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/documents/<doc_id>', methods=['PUT', 'POST'])
-@login_required
-def api_edit_document(doc_id):
-    user = session.get('user', {})
-    user_name = user.get('name', 'Administrator')
-
-    file = request.files.get('file')
-    if file:
-        file_ok, file_err = validate_uploaded_file(file)
-        if not file_ok:
-            return jsonify({'success': False, 'error': file_err}), 400
-        res_id = replace_document_file(doc_id, file, file.filename, user_name=user_name)
-        if not res_id:
-            return jsonify({'success': False, 'error': 'Failed replacing document file'}), 500
-        return jsonify({'success': True, 'id': res_id, 'message': 'Document file replaced successfully'})
-
-    update_data = {}
-    if 'title' in request.form: update_data['title'] = sanitize_string(request.form.get('title'), 200)
-    if 'category' in request.form: update_data['category'] = sanitize_string(request.form.get('category'), 100)
-    if 'document_number' in request.form: update_data['document_number'] = sanitize_string(request.form.get('document_number'), 100)
-    if 'expiry_date' in request.form: update_data['expiry_date'] = request.form.get('expiry_date')
-    if 'issue_date' in request.form: update_data['issue_date'] = request.form.get('issue_date')
-    if 'remarks' in request.form: update_data['remarks'] = sanitize_string(request.form.get('remarks'), 500)
-
-    res_id = update_document_metadata(doc_id, update_data, user_name=user_name)
-    if not res_id:
-        return jsonify({'success': False, 'error': 'Failed updating document metadata'}), 500
-    return jsonify({'success': True, 'id': res_id, 'message': 'Document metadata updated successfully'})
-
 @app.route('/api/documents/<doc_id>', methods=['DELETE'])
-@login_required
+@admin_required
 def api_delete_document(doc_id):
-    user = session.get('user', {})
-    user_name = user.get('name', 'Administrator')
-    success = delete_document(doc_id, user_name=user_name)
+    success = delete_document(doc_id)
     return jsonify({'success': success})
 
 @app.route('/api/calendar/events', methods=['GET'])
