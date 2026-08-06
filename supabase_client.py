@@ -493,14 +493,33 @@ def upload_to_supabase_storage(file_obj, filename, category="Other Documents", f
                 content = file_obj.read()
                 if hasattr(file_obj, 'seek'):
                     file_obj.seek(0)
+            elif isinstance(file_obj, str):
+                content = file_obj.encode('utf-8')
             else:
                 content = file_obj
 
-            res = client.storage.from_(bucket_name).upload(
-                path=file_path,
-                file=content,
-                file_options={"upsert": "true"}
-            )
+            if not isinstance(content, bytes):
+                content = bytes(content)
+
+            try:
+                res = client.storage.from_(bucket_name).upload(
+                    path=file_path,
+                    file=content,
+                    file_options={"upsert": "true"}
+                )
+            except Exception as e_up:
+                err_str = str(e_up).lower()
+                if 'already exists' in err_str or 'duplicate' in err_str or '409' in err_str:
+                    try:
+                        res = client.storage.from_(bucket_name).update(
+                            path=file_path,
+                            file=content,
+                            file_options={"upsert": "true"}
+                        )
+                    except Exception as e_update:
+                        raise e_update
+                else:
+                    raise e_up
 
             try:
                 preview_url = client.storage.from_(bucket_name).get_public_url(file_path)
@@ -520,12 +539,11 @@ def upload_to_supabase_storage(file_obj, filename, category="Other Documents", f
                 'path': file_path
             }
         except Exception as e:
-            logging.error(f"[SUPABASE STORAGE UPLOAD FAILURE]\n"
-                          f"  • Upload Destination: Supabase Storage\n"
-                          f"  • Bucket Name: {bucket_name}\n"
-                          f"  • File Path: {file_path}\n"
-                          f"  • Error: {e}")
+            err_msg = f"[SUPABASE STORAGE UPLOAD FAILURE] Bucket: {bucket_name} | Path: {file_path} | Error: {e}"
+            logging.error(err_msg)
             logging.error(traceback.format_exc())
+            if not is_testing_environment():
+                raise RuntimeError(err_msg) from e
 
     logging.info(f"[SUPABASE STORAGE STANDBY]\n"
                  f"  • Upload Destination: Supabase Storage (Standby Mode)\n"
