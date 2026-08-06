@@ -381,7 +381,11 @@ class BCWAPortalTestCase(unittest.TestCase):
             self.assertTrue(prev_data.get('success'))
             self.assertEqual(prev_data.get('bucket_name'), 'documents')
             self.assertIn('documents', prev_data.get('preview_url', ''))
-            print("Document Vault Upload & Preview Single Bucket Test Passed.")
+
+            # 3. Query preview endpoint with redirect=true (default HTTP 302 Redirect)
+            res_redir = c.get(f'/api/documents/{doc_id}/preview')
+            self.assertEqual(res_redir.status_code, 302)
+            print("Document Vault Upload & Preview Single Bucket Test Passed (JSON & 302 Redirect).")
 
 if __name__ == '__main__':
     unittest.main()
