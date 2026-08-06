@@ -372,8 +372,8 @@ const BCWAApp = {
                         <div class="text-secondary" style="font-size:12px;">Expiry Date: <strong>${d.expiry_date || 'N/A'}</strong></div>
                     </div>
                     <div class="d-flex gap-2 mt-3 pt-2" style="border-top:1px solid #F1F5F9;">
-                        <a href="${d.file_url}" target="_blank" class="btn btn-secondary btn-sm w-50 text-center"><i data-lucide="eye"></i> Preview</a>
-                        <a href="/api/store/documents/${d.id}/download" class="btn btn-primary btn-sm w-50 text-center"><i data-lucide="download"></i> Download</a>
+                        <a href="${d.file_url}" target="_blank" class="action-btn btn-action-preview" style="width:48%;"><i data-lucide="eye"></i> Preview</a>
+                        <a href="/api/store/documents/${d.id}/download" class="action-btn btn-action-download" style="width:48%;"><i data-lucide="download"></i> Download PDF</a>
                     </div>
                 </div>
             `).join('');
@@ -840,8 +840,8 @@ const BCWAApp = {
                             </span>
                         </td>
                         <td>
-                            <a href="${v.file_url}" target="_blank" class="btn btn-sm btn-secondary">
-                                <i data-lucide="download" style="width:14px;"></i> Download
+                            <a href="${v.file_url}" target="_blank" class="action-btn btn-action-download">
+                                <i data-lucide="download"></i> Download PDF
                             </a>
                         </td>
                     </tr>
