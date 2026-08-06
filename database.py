@@ -523,10 +523,12 @@ def save_medical_store(data):
     print(f"[STORE REGISTRATION PAYLOAD] Store ID: {store_id} | Firm ID: {firm_id} | Payload:\n{json.dumps(record, indent=2)}")
     logging.info(f"[STORE REGISTRATION PAYLOAD] Store ID: {store_id} | Firm ID: {firm_id} | Payload:\n{json.dumps(record, indent=2)}")
 
+    db_record = {k: v for k, v in record.items() if k != 'firm_id'}
+
     try:
         if is_new:
-            record['created_at'] = now_str
-            res_db = db_table('medical_stores').insert(record).execute()
+            db_record['created_at'] = now_str
+            res_db = db_table('medical_stores').insert(db_record).execute()
             print(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Supabase | Store ID: {store_id} | Response: {res_db.data}")
             logging.info(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Supabase | Store ID: {store_id} | Response: {res_db.data}")
             
@@ -536,7 +538,7 @@ def save_medical_store(data):
             except Exception as e_act:
                 logging.warning(f"[ACTIVITY LOG NOTICE] {e_act}")
         else:
-            res_db = db_table('medical_stores').update(record).eq('id', store_id).execute()
+            res_db = db_table('medical_stores').update(db_record).eq('id', store_id).execute()
             print(f"[STORE UPDATE SUCCESS] Store '{store_name}' updated successfully in Supabase | Store ID: {store_id} | Response: {res_db.data}")
             logging.info(f"[STORE UPDATE SUCCESS] Store '{store_name}' updated successfully in Supabase | Store ID: {store_id} | Response: {res_db.data}")
             
