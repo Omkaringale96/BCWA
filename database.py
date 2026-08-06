@@ -579,8 +579,9 @@ def save_medical_store(data):
         logging.warning(f"[COMPLIANCE CALC NOTICE] {e_comp}")
 
     try:
+        import threading
         from notification_engine import run_reminder_engine
-        run_reminder_engine()
+        threading.Thread(target=run_reminder_engine, daemon=True).start()
     except Exception as e_rem:
         logging.warning(f"[AUTO REMINDER NOTICE] {e_rem}")
 
@@ -688,8 +689,9 @@ def save_pharmacist(data):
         log_activity("Office Staff", "Pharmacist Updated", f"Updated Pharmacist: {data.get('full_name')}", data.get('store_id'))
 
     try:
+        import threading
         from notification_engine import run_reminder_engine
-        run_reminder_engine()
+        threading.Thread(target=run_reminder_engine, daemon=True).start()
     except Exception as e_rem:
         logging.warning(f"[AUTO REMINDER NOTICE] {e_rem}")
 
@@ -815,8 +817,9 @@ def save_document(data):
     log_activity("Office Staff", "Document Uploaded", f"Uploaded {data.get('category')} for Store ID: {data.get('store_id')}", data.get('store_id'))
 
     try:
+        import threading
         from notification_engine import run_reminder_engine
-        run_reminder_engine()
+        threading.Thread(target=run_reminder_engine, daemon=True).start()
     except Exception as e_rem:
         logging.warning(f"[AUTO REMINDER NOTICE] {e_rem}")
 
