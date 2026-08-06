@@ -147,8 +147,12 @@ class SupabaseInsertBuilder:
                 res = client.table(self.table_name).insert(self.data).execute()
                 return SupabaseResponse(res.data)
             except Exception as e:
-                logging.error(f"Supabase insert error in {self.table_name}: {e}")
-                logging.error(traceback.format_exc())
+                err_str = str(e)
+                if 'PGRST205' in err_str or 'Could not find the table' in err_str:
+                    logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
+                else:
+                    logging.error(f"Supabase insert error in {self.table_name}: {e}")
+                    logging.error(traceback.format_exc())
 
         rows = _mock_storage.setdefault(self.table_name, [])
         items = self.data if isinstance(self.data, list) else [self.data]
@@ -167,8 +171,12 @@ class SupabaseUpsertBuilder:
                 res = client.table(self.table_name).upsert(self.data).execute()
                 return SupabaseResponse(res.data)
             except Exception as e:
-                logging.error(f"Supabase upsert error in {self.table_name}: {e}")
-                logging.error(traceback.format_exc())
+                err_str = str(e)
+                if 'PGRST205' in err_str or 'Could not find the table' in err_str:
+                    logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
+                else:
+                    logging.error(f"Supabase upsert error in {self.table_name}: {e}")
+                    logging.error(traceback.format_exc())
 
         rows = _mock_storage.setdefault(self.table_name, [])
         items = self.data if isinstance(self.data, list) else [self.data]
@@ -293,8 +301,12 @@ class SupabaseUpdateBuilder:
                 res = q.execute()
                 return SupabaseResponse(res.data)
             except Exception as e:
-                logging.error(f"Supabase update error in {self.table_name}: {e}")
-                logging.error(traceback.format_exc())
+                err_str = str(e)
+                if 'PGRST205' in err_str or 'Could not find the table' in err_str:
+                    logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
+                else:
+                    logging.error(f"Supabase update error in {self.table_name}: {e}")
+                    logging.error(traceback.format_exc())
 
         rows = _mock_storage.get(self.table_name, [])
         updated = []
@@ -326,8 +338,12 @@ class SupabaseDeleteBuilder:
                 res = q.execute()
                 return SupabaseResponse(res.data)
             except Exception as e:
-                logging.error(f"Supabase delete error in {self.table_name}: {e}")
-                logging.error(traceback.format_exc())
+                err_str = str(e)
+                if 'PGRST205' in err_str or 'Could not find the table' in err_str:
+                    logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
+                else:
+                    logging.error(f"Supabase delete error in {self.table_name}: {e}")
+                    logging.error(traceback.format_exc())
 
         rows = _mock_storage.get(self.table_name, [])
         new_rows = []
