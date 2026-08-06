@@ -257,6 +257,53 @@ def api_session_timeout():
     session.clear()
     return jsonify({'success': True, 'message': 'Session expired due to inactivity.'})
 
+@app.route('/api/auth/store-login', methods=['POST'])
+def api_store_login():
+    ip = get_client_ip()
+    is_locked, remaining_secs = check_ip_lockout(ip)
+    if is_locked:
+        return jsonify({'success': False, 'error': 'Too many failed attempts. Try again later.'}), 429
+
+    data = request.json or {}
+    firm_id = (data.get('firm_id') or '').strip().upper()
+    password = (data.get('password') or '').strip()
+
+    if not firm_id or not password:
+        return jsonify({'success': False, 'error': 'Firm ID and Password required'}), 400
+
+    from database import verify_store_credentials
+    account = verify_store_credentials(firm_id, password)
+
+    if account and account.get('status') == 'Active':
+        reset_login_lockout(ip)
+        session.clear()
+        session.permanent = True
+
+        store_id = account.get('store_id')
+        user_payload = {
+            'id': account['firm_id'],
+            'firm_id': account['firm_id'],
+            'store_id': store_id,
+            'name': account['owner_name'],
+            'store_name': account['store_name'],
+            'email': account['email'],
+            'mobile': account['mobile'],
+            'role': 'Store',
+            'status': 'Active'
+        }
+
+        session['user'] = user_payload
+        session['server_startup_id'] = SERVER_STARTUP_ID
+        session['last_activity'] = datetime.now().isoformat()
+
+        audit_security_log("Store Login", f"Store '{account['store_name']}' ({account['firm_id']}) logged in successfully.", user_name=account['owner_name'], ip=ip)
+
+        return jsonify({'success': True, 'user': user_payload})
+
+    record_failed_login(ip)
+    audit_security_log("Failed Store Login", f"Invalid login attempt for Firm ID '{firm_id}'", user_name=firm_id or "Anonymous", ip=ip)
+    return jsonify({'success': False, 'error': 'Invalid Firm ID or Password'}), 401
+
 @app.route('/api/auth/session', methods=['GET'])
 def api_check_session():
     if is_session_valid():
@@ -264,10 +311,11 @@ def api_check_session():
         if last_act_str:
             try:
                 last_act = datetime.fromisoformat(last_act_str)
-                if (datetime.now() - last_act).total_seconds() > 60:
-                    user = session.get('user', {})
-                    user_name = user.get('name', 'Officer')
-                    audit_security_log("Session Timeout", f"Server-side session expired due to 60s inactivity for '{user_name}'.", user_name=user_name)
+                user_role = session.get('user', {}).get('role')
+                max_inactivity = 900 if user_role == 'Store' else 60 # 15 min for Store, 60s for Admin
+                if (datetime.now() - last_act).total_seconds() > max_inactivity:
+                    user_name = session.get('user', {}).get('name', 'User')
+                    audit_security_log("Session Timeout", f"Server-side session expired due to inactivity for '{user_name}'.", user_name=user_name)
                     session.clear()
                     return jsonify({'authenticated': False, 'reason': 'timeout'}), 401
             except Exception:
@@ -820,6 +868,240 @@ def api_admin_send_test_email():
         err_msg = str(e)
         logging.error(f"[TEST EMAIL ROUTE EXCEPTION] {err_msg}\n{traceback.format_exc()}")
         return jsonify({'success': False, 'error': f"Server Exception: {err_msg}"}), 500
+
+# -----------------------------------------------------------------------------
+# MEDICAL STORE SELF-SERVICE PORTAL & TENANT APIS
+# -----------------------------------------------------------------------------
+def get_current_store_id():
+    user = session.get('user', {})
+    if not is_session_valid() or not user:
+        return None
+    if user.get('role') == 'Store':
+        return user.get('store_id')
+    return None
+
+@app.route('/api/store/dashboard', methods=['GET'])
+def api_store_dashboard():
+    store_id = get_current_store_id()
+    if not store_id:
+        return jsonify({'error': 'Unauthorized Store Access'}), 403
+
+    store = get_medical_store(store_id)
+    if not store:
+        return jsonify({'error': 'Store record not found'}), 404
+
+    docs = get_documents(store_id=store_id)
+    pharmacists = get_pharmacists(store_id=store_id)
+    notifs = get_notifications(store_id=store_id)
+
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    dl_exp = store.get('dl_expiry_date', 'N/A')
+    fssai_exp = store.get('fssai_expiry_date', 'N/A')
+
+    ppp_exp = "N/A"
+    if pharmacists:
+        ppp_exp = pharmacists[0].get('ppp_expiry', 'N/A')
+
+    dl_status = "Active" if dl_exp > today_str else "Expired"
+    fssai_status = "Active" if fssai_exp > today_str else "Expired"
+    ppp_status = "Active" if ppp_exp > today_str else "Expired"
+
+    return jsonify({
+        'store_id': store_id,
+        'store_name': store.get('store_name'),
+        'owner_name': store.get('owner_name'),
+        'firm_id': session.get('user', {}).get('firm_id'),
+        'compliance_score': store.get('compliance_score', 95),
+        'dl_expiry_date': dl_exp,
+        'dl_status': dl_status,
+        'fssai_expiry_date': fssai_exp,
+        'fssai_status': fssai_status,
+        'ppp_expiry_date': ppp_exp,
+        'ppp_status': ppp_status,
+        'total_documents': len(docs),
+        'notifications': notifs[:10]
+    })
+
+@app.route('/api/store/documents', methods=['GET'])
+def api_store_documents():
+    store_id = get_current_store_id()
+    if not store_id:
+        return jsonify({'error': 'Unauthorized Store Access'}), 403
+
+    from sample_pdf_generator import ensure_sample_pdfs_for_store
+    store = get_medical_store(store_id)
+    store_name = store.get('store_name', 'Store') if store else 'Store'
+    ensure_sample_pdfs_for_store(store_id, store_name)
+
+    docs = get_documents(store_id=store_id)
+    
+    if not docs:
+        samples = [
+            ("Drug License", f"DL-{store_id}-20B", store.get('dl_expiry_date', '2026-12-31'), f"/static/docs/{store_id}_Drug License.pdf"),
+            ("Food License", f"FSSAI-{store_id}", store.get('fssai_expiry_date', '2026-11-30'), f"/static/docs/{store_id}_Food License.pdf"),
+            ("Rent Agreement", f"RENT-{store_id}", "2027-06-30", f"/static/docs/{store_id}_Rent Agreement.pdf"),
+            ("Inspection Report", f"INSP-{store_id}", "2026-10-15", f"/static/docs/{store_id}_Inspection Report.pdf"),
+            ("Owner Aadhaar", f"ADH-{store_id}", "N/A", f"/static/docs/{store_id}_Owner Aadhaar.pdf")
+        ]
+        for cat, num, exp, url in samples:
+            doc_id = f"DOC-{store_id}-{cat.replace(' ', '')}"
+            save_document({
+                'id': doc_id,
+                'store_id': store_id,
+                'title': f"{cat} - {store_name}",
+                'category': cat,
+                'file_name': f"{cat}.pdf",
+                'file_size_kb': 142,
+                'file_url': url,
+                'document_number': num,
+                'expiry_date': exp,
+                'quality_status': 'Passed',
+                'quality_notes': 'Verified Document Record'
+            })
+        docs = get_documents(store_id=store_id)
+
+    return jsonify({'documents': docs, 'total': len(docs)})
+
+@app.route('/api/store/documents/<doc_id>/download', methods=['GET'])
+def api_store_download_document(doc_id):
+    store_id = get_current_store_id()
+    if not store_id:
+        return jsonify({'error': 'Unauthorized Store Access'}), 403
+
+    docs = get_documents(store_id=store_id)
+    matched = [d for d in docs if d['id'] == doc_id or doc_id in d['id']]
+    if not matched:
+        return jsonify({'error': 'Document not found or access denied'}), 404
+
+    doc = matched[0]
+    file_url = doc.get('file_url', '')
+    if file_url.startswith('/static/'):
+        local_path = os.path.join(app.root_path, file_url.lstrip('/'))
+        if os.path.exists(local_path):
+            return send_file(local_path, as_attachment=True, download_name=doc.get('file_name', 'document.pdf'))
+
+    from sample_pdf_generator import create_sample_pdf
+    pdf_bytes = create_sample_pdf(doc.get('title', 'Document'), doc.get('category', 'Compliance'), session['user']['store_name'], doc_id)
+    return Response(pdf_bytes, mimetype='application/pdf', headers={
+        'Content-Disposition': f'attachment; filename="{doc.get("file_name", "Document.pdf")}"'
+    })
+
+@app.route('/api/store/renewals', methods=['GET'])
+def api_store_renewals():
+    store_id = get_current_store_id()
+    if not store_id:
+        return jsonify({'error': 'Unauthorized Store Access'}), 403
+
+    store = get_medical_store(store_id) or {}
+    today = datetime.now()
+    renewals = []
+
+    for key, label in [('dl_expiry_date', 'Drug License (20B/21B)'), ('fssai_expiry_date', 'FSSAI Food License')]:
+        exp_str = store.get(key)
+        if exp_str:
+            try:
+                exp_dt = datetime.strptime(exp_str, '%Y-%m-%d')
+                days = (exp_dt - today).days
+                if days < 0:
+                    status = 'Expired'
+                    color = 'Red'
+                elif days <= 15:
+                    status = 'Urgent'
+                    color = 'Red'
+                elif days <= 30:
+                    status = 'Approaching'
+                    color = 'Orange'
+                elif days <= 90:
+                    status = 'Upcoming'
+                    color = 'Yellow'
+                else:
+                    status = 'Active'
+                    color = 'Green'
+
+                renewals.append({
+                    'document': label,
+                    'expiry_date': exp_str,
+                    'days_remaining': days,
+                    'status': status,
+                    'color': color
+                })
+            except Exception:
+                pass
+
+    return jsonify({'renewals': renewals})
+
+@app.route('/api/store/profile', methods=['GET'])
+def api_store_profile():
+    store_id = get_current_store_id()
+    if not store_id:
+        return jsonify({'error': 'Unauthorized Store Access'}), 403
+
+    store = get_medical_store(store_id) or {}
+    user = session.get('user', {})
+    return jsonify({
+        'store_id': store_id,
+        'firm_id': user.get('firm_id'),
+        'store_name': store.get('store_name', user.get('store_name')),
+        'owner_name': store.get('owner_name', user.get('name')),
+        'email': store.get('owner_email', user.get('email')),
+        'mobile': store.get('owner_mobile', user.get('mobile')),
+        'address': store.get('address', 'Boisar, Maharashtra')
+    })
+
+@app.route('/api/store/request-password-reset', methods=['POST'])
+def api_store_request_password_reset():
+    store_id = get_current_store_id()
+    if not store_id:
+        return jsonify({'error': 'Unauthorized Store Access'}), 403
+
+    user = session.get('user', {})
+    firm_id = user.get('firm_id', 'MED0000')
+    store_name = user.get('store_name', 'Store')
+
+    audit_security_log("Password Reset Request", f"Store '{store_name}' ({firm_id}) requested password reset.", user_name=user.get('name'))
+    return jsonify({'success': True, 'message': 'Password reset request submitted to Administrator.'})
+
+# -----------------------------------------------------------------------------
+# ADMIN WHATSAPP & MULTI-CHANNEL TEST APIS
+# -----------------------------------------------------------------------------
+@app.route('/api/admin/send-test-whatsapp', methods=['POST'])
+def api_admin_send_test_whatsapp():
+    user = session.get('user')
+    if not user or user.get('role') != 'Administrator':
+        return jsonify({'success': False, 'error': 'Administrator access required'}), 403
+
+    from whatsapp_service import send_whatsapp_text
+    target_mobile = os.environ.get('TEST_WHATSAPP_NUMBER', '8766759824')
+    msg = f"🟢 *BCWA WhatsApp Integration Test Successful*\n\nServer Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\nEnvironment: {app.config.get('ENV', 'development').upper()}\nStatus: Verified Operational."
+
+    ok, status_msg = send_whatsapp_text(target_mobile, msg)
+    return jsonify({
+        'success': ok,
+        'message': status_msg,
+        'details': {
+            'target': target_mobile,
+            'response': status_msg
+        }
+    })
+
+@app.route('/api/admin/send-test-both', methods=['POST'])
+def api_admin_send_test_both():
+    user = session.get('user')
+    if not user or user.get('role') != 'Administrator':
+        return jsonify({'success': False, 'error': 'Administrator access required'}), 403
+
+    from whatsapp_service import send_whatsapp_text
+    from email_service import send_admin_test_email
+
+    email_res = send_admin_test_email()
+    target_mobile = os.environ.get('TEST_WHATSAPP_NUMBER', '8766759824')
+    wa_ok, wa_msg = send_whatsapp_text(target_mobile, f"🟢 *BCWA Dual-Channel Notification Test*\nBoth Email and WhatsApp dispatches tested successfully.")
+
+    return jsonify({
+        'success': email_res.get('success') and wa_ok,
+        'email_status': email_res.get('response', email_res.get('error')),
+        'whatsapp_status': wa_msg
+    })
 
 @app.errorhandler(500)
 def handle_500_error(e):

@@ -181,6 +181,45 @@ class BCWAPortalTestCase(unittest.TestCase):
         self.assertTrue(ok2)
         print("Email & Notification Service Multi-Channel Abstraction Test Passed.")
 
+    def test_store_self_service_portal(self):
+        from seed_data import generate_seed_data
+        generate_seed_data()
+
+        # Test Store Login with Firm ID MED0001
+        res = self.app.post('/api/auth/store-login', json={'firm_id': 'MED0001', 'password': 'BCWA@123'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get('success'))
+        self.assertEqual(data['user']['role'], 'Store')
+        self.assertEqual(data['user']['firm_id'], 'MED0001')
+
+        # Test Store Dashboard API
+        res_dash = self.app.get('/api/store/dashboard')
+        self.assertEqual(res_dash.status_code, 200)
+        dash_data = res_dash.get_json()
+        self.assertEqual(dash_data['firm_id'], 'MED0001')
+
+        # Test Store Documents API
+        res_docs = self.app.get('/api/store/documents')
+        self.assertEqual(res_docs.status_code, 200)
+        docs_data = res_docs.get_json()
+        self.assertIn('documents', docs_data)
+
+        # Test Tenant Security: Store User blocked from Admin APIs
+        res_admin = self.app.get('/api/admin/verify-smtp')
+        self.assertEqual(res_admin.status_code, 403)
+
+        print("Store Self-Service Portal & Tenant Security Test Passed.")
+
+    def test_whatsapp_service(self):
+        import whatsapp_service
+        ok, msg = whatsapp_service.send_whatsapp_text('8766759824', 'Test WhatsApp Message')
+        self.assertTrue(ok)
+        
+        ok_rem, msg_rem = whatsapp_service.send_whatsapp_reminder('8766759824', 'Apex Chemist', 'Drug License', 7)
+        self.assertTrue(ok_rem)
+        print("WhatsApp Service Abstraction Test Passed.")
+
 if __name__ == '__main__':
     unittest.main()
 

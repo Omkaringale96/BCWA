@@ -749,3 +749,49 @@ def save_user(data):
     }
     db_table('users').upsert(record).execute()
     return user_id
+
+# -----------------------------------------------------------------------------
+# MEDICAL STORE SELF-SERVICE PORTAL (FIRM ACCOUNTS & AUTHENTICATION)
+# -----------------------------------------------------------------------------
+from werkzeug.security import generate_password_hash, check_password_hash
+
+def get_store_account_by_firm_id(firm_id):
+    try:
+        res = db_table('store_accounts').select('*').eq('firm_id', firm_id.strip().upper()).execute()
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
+
+def verify_store_credentials(firm_id, password):
+    account = get_store_account_by_firm_id(firm_id)
+    if not account:
+        return None
+    pwd_hash = account.get('password_hash', '')
+    if check_password_hash(pwd_hash, password):
+        return account
+    return None
+
+def create_or_update_store_account(firm_id, password, store_id, owner_name, store_name, email, mobile, status='Active'):
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    pwd_hash = generate_password_hash(password)
+    record = {
+        'firm_id': firm_id.strip().upper(),
+        'password_hash': pwd_hash,
+        'store_id': store_id,
+        'owner_name': owner_name,
+        'store_name': store_name,
+        'email': email,
+        'mobile': mobile,
+        'status': status,
+        'updated_at': now_str
+    }
+    try:
+        existing = get_store_account_by_firm_id(firm_id)
+        if not existing:
+            record['created_at'] = now_str
+            db_table('store_accounts').insert(record).execute()
+        else:
+            db_table('store_accounts').update(record).eq('firm_id', firm_id.strip().upper()).execute()
+    except Exception as e:
+        print(f"[STORE ACCOUNTS ERROR] {e}")
+    return record

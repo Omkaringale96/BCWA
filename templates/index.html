@@ -26,12 +26,24 @@
                 <span class="badge badge-info mt-1">Official Compliance Portal</span>
             </div>
 
+            <!-- LOGIN MODE TOGGLE TABS -->
+            <div class="d-flex mb-3 text-center" style="background:#F1F5F9; border-radius:8px; padding:4px;">
+                <button type="button" class="btn btn-sm w-50 active" id="tab-login-admin" style="border-radius:6px; font-weight:600;" onclick="BCWAApp.switchLoginTab('admin')">
+                    <i data-lucide="shield-check" style="width:14px; margin-right:4px;"></i> Admin Login
+                </button>
+                <button type="button" class="btn btn-sm w-50 text-secondary" id="tab-login-store" style="border-radius:6px; font-weight:600;" onclick="BCWAApp.switchLoginTab('store')">
+                    <i data-lucide="store" style="width:14px; margin-right:4px;"></i> Store Login
+                </button>
+            </div>
+
             <div class="alert alert-danger hidden mb-3" id="login-error-alert"></div>
 
+            <!-- ADMIN LOGIN FORM -->
             <form id="form-login" autocomplete="off">
+                <input type="hidden" id="login-mode" value="admin">
                 <div class="form-group mb-3">
-                    <label>Officer ID / Username *</label>
-                    <input type="text" id="login-username" class="form-control form-control-lg" placeholder="Enter Officer ID" required autocomplete="off">
+                    <label id="lbl-login-user">Officer ID / Username *</label>
+                    <input type="text" id="login-username" class="form-control form-control-lg" placeholder="Enter Officer ID (e.g. VIN2821)" required autocomplete="off">
                 </div>
 
                 <div class="form-group mb-4">
@@ -41,13 +53,13 @@
 
                 <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-login-submit">
                     <i data-lucide="log-in"></i>
-                    <span>Sign In to Portal</span>
+                    <span id="txt-login-submit">Sign In to Admin Portal</span>
                 </button>
             </form>
 
             <div class="login-footer">
-                <p class="text-secondary" style="font-size:11px; text-align:center; margin-top:16px;">
-                    &bull; Public registration disabled. Only System Administrator can grant officer credentials.
+                <p class="text-secondary" style="font-size:11px; text-align:center; margin-top:16px;" id="login-footer-text">
+                    &bull; Demo Store Accounts: <code>MED0001</code> to <code>MED0005</code> &bull; Password: <code>BCWA@123</code>
                 </p>
             </div>
         </div>
@@ -68,7 +80,8 @@
                 </div>
             </div>
 
-            <nav class="nav-menu">
+            <!-- ADMIN NAV MENU -->
+            <nav class="nav-menu" id="admin-nav-menu">
                 <a href="#dashboard" class="nav-item active" data-tab="dashboard">
                     <i data-lucide="layout-dashboard"></i>
                     <span>Dashboard</span>
@@ -101,6 +114,30 @@
                 <a href="#admin" class="nav-item" data-tab="admin">
                     <i data-lucide="shield-check"></i>
                     <span>Admin</span>
+                </a>
+            </nav>
+
+            <!-- STORE SELF-SERVICE NAV MENU (STORE USER) -->
+            <nav class="nav-menu hidden" id="store-nav-menu">
+                <a href="#store-dashboard" class="nav-item active" data-tab="store-dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>My Dashboard</span>
+                </a>
+                <a href="#store-documents" class="nav-item" data-tab="store-documents">
+                    <i data-lucide="folder"></i>
+                    <span>My Documents</span>
+                </a>
+                <a href="#store-renewals" class="nav-item" data-tab="store-renewals">
+                    <i data-lucide="clock"></i>
+                    <span>Renewals Timeline</span>
+                </a>
+                <a href="#store-notifications" class="nav-item" data-tab="store-notifications">
+                    <i data-lucide="bell"></i>
+                    <span>My Alerts</span>
+                </a>
+                <a href="#store-profile" class="nav-item" data-tab="store-profile">
+                    <i data-lucide="user"></i>
+                    <span>Store Profile</span>
                 </a>
             </nav>
 
@@ -591,12 +628,20 @@
                             <h2>User &amp; Access Management</h2>
                             <p class="text-secondary">Role-based access control for Administrators, Office Staff, and Read Only Auditors.</p>
                         </div>
-                        <div style="display:flex; gap:10px;">
-                            <button class="btn btn-secondary" id="btn-send-test-email" onclick="BCWAApp.sendTestEmail()">
-                                <i data-lucide="mail-check"></i>
-                                <span>Send Test Email</span>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button class="btn btn-secondary btn-sm" id="btn-send-test-email" onclick="BCWAApp.sendTestEmail()">
+                                <i data-lucide="mail"></i>
+                                <span>Test Email</span>
                             </button>
-                            <button class="btn btn-primary" id="btn-add-user">
+                            <button class="btn btn-secondary btn-sm" id="btn-send-test-whatsapp" onclick="BCWAApp.sendTestWhatsApp()">
+                                <i data-lucide="message-square"></i>
+                                <span>Test WhatsApp</span>
+                            </button>
+                            <button class="btn btn-secondary btn-sm" id="btn-send-test-both" onclick="BCWAApp.sendTestBoth()">
+                                <i data-lucide="send"></i>
+                                <span>Test Both Channels</span>
+                            </button>
+                            <button class="btn btn-primary btn-sm" id="btn-add-user">
                                 <i data-lucide="user-plus"></i>
                                 <span>Add System User</span>
                             </button>
@@ -618,6 +663,162 @@
                                 </thead>
                                 <tbody></tbody>
                             </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================================================================== -->
+                <!-- STORE SELF-SERVICE PORTAL PANES (STORE USER ROLE) -->
+                <!-- ==================================================================== -->
+                <section class="tab-pane" id="pane-store-dashboard">
+                    <div class="pane-header">
+                        <div>
+                            <h2 id="sd-store-name">Medical Store Dashboard</h2>
+                            <p class="text-secondary">Self-Service Compliance, Licenses, and Document Vault.</p>
+                        </div>
+                        <span class="badge badge-info" id="sd-firm-badge">Firm ID: MED0001</span>
+                    </div>
+
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-title">Compliance Score</span>
+                                <div class="kpi-icon icon-blue"><i data-lucide="shield-check"></i></div>
+                            </div>
+                            <div class="kpi-value" id="sd-compliance-score">--</div>
+                            <div class="kpi-footer text-success">Verified Active</div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-title">Drug License (20B/21B)</span>
+                                <div class="kpi-icon icon-green"><i data-lucide="file-check"></i></div>
+                            </div>
+                            <div class="kpi-value" id="sd-dl-status" style="font-size:18px;">Active</div>
+                            <div class="kpi-footer text-secondary" id="sd-dl-expiry">Exp: --</div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-title">FSSAI Food License</span>
+                                <div class="kpi-icon icon-purple"><i data-lucide="award"></i></div>
+                            </div>
+                            <div class="kpi-value" id="sd-fssai-status" style="font-size:18px;">Active</div>
+                            <div class="kpi-footer text-secondary" id="sd-fssai-expiry">Exp: --</div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-title">PPP Registration</span>
+                                <div class="kpi-icon icon-amber"><i data-lucide="user-check"></i></div>
+                            </div>
+                            <div class="kpi-value" id="sd-ppp-status" style="font-size:18px;">Active</div>
+                            <div class="kpi-footer text-secondary" id="sd-ppp-expiry">Exp: --</div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h3 class="card-title">Recent System Notifications &amp; Reminder Alerts</h3>
+                        </div>
+                        <div class="card-body" id="sd-notifications-list">
+                            <div class="text-center text-muted p-3">Loading store alerts...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-store-documents">
+                    <div class="pane-header">
+                        <div>
+                            <h2>My Document Vault</h2>
+                            <p class="text-secondary">Official Drug License, FSSAI, Rent Agreement, and Identification Documents.</p>
+                        </div>
+                        <span class="badge badge-secondary" style="font-size:11px;">Read-Only Vault &bull; Managed by Administrator</span>
+                    </div>
+
+                    <div class="grid-layout" id="sd-document-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:16px;">
+                        <div class="text-center text-muted p-4 col-span-full">Loading documents...</div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-store-renewals">
+                    <div class="pane-header">
+                        <div>
+                            <h2>License &amp; Permit Renewal Timeline</h2>
+                            <p class="text-secondary">Track upcoming document expiry dates and renewal stages.</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="table-responsive">
+                            <table class="table" id="table-store-renewals">
+                                <thead>
+                                    <tr>
+                                        <th>Document Type</th>
+                                        <th>Expiry Date</th>
+                                        <th>Days Remaining</th>
+                                        <th>Renewal Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-store-notifications">
+                    <div class="pane-header">
+                        <div>
+                            <h2>My Notification Center</h2>
+                            <p class="text-secondary">History of email and WhatsApp reminder notices sent to your store.</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body" id="sd-full-notifications-feed">
+                            <div class="text-center text-muted p-3">Loading notification logs...</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-pane" id="pane-store-profile">
+                    <div class="pane-header">
+                        <div>
+                            <h2>Medical Store Profile</h2>
+                            <p class="text-secondary">Registered store credentials and contact details.</p>
+                        </div>
+                        <button class="btn btn-secondary" onclick="BCWAApp.requestStorePasswordReset()">
+                            <i data-lucide="key"></i>
+                            <span>Request Password Reset</span>
+                        </button>
+                    </div>
+
+                    <div class="card p-4 mb-4">
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; font-size:14px;">
+                            <div>
+                                <strong class="text-secondary">Firm ID:</strong>
+                                <div id="sp-firm-id" class="mt-1" style="font-weight:600; font-size:16px;">--</div>
+                            </div>
+                            <div>
+                                <strong class="text-secondary">Store Name:</strong>
+                                <div id="sp-store-name" class="mt-1" style="font-weight:600; font-size:16px;">--</div>
+                            </div>
+                            <div>
+                                <strong class="text-secondary">Owner Name:</strong>
+                                <div id="sp-owner-name" class="mt-1">--</div>
+                            </div>
+                            <div>
+                                <strong class="text-secondary">Email Address:</strong>
+                                <div id="sp-email" class="mt-1">--</div>
+                            </div>
+                            <div>
+                                <strong class="text-secondary">Mobile Number:</strong>
+                                <div id="sp-mobile" class="mt-1">--</div>
+                            </div>
+                            <div>
+                                <strong class="text-secondary">Address:</strong>
+                                <div id="sp-address" class="mt-1">--</div>
+                            </div>
                         </div>
                     </div>
                 </section>

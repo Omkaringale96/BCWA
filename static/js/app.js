@@ -54,12 +54,44 @@ const BCWAApp = {
     // -------------------------------------------------------------------------
     // AUTHENTICATION & LOGIN HANDLERS
     // -------------------------------------------------------------------------
+    switchLoginTab(mode) {
+        const adminTab = document.getElementById('tab-login-admin');
+        const storeTab = document.getElementById('tab-login-store');
+        const modeInput = document.getElementById('login-mode');
+        const labelUser = document.getElementById('lbl-login-user');
+        const userInput = document.getElementById('login-username');
+        const submitTxt = document.getElementById('txt-login-submit');
+        const footerTxt = document.getElementById('login-footer-text');
+        const alertBox = document.getElementById('login-error-alert');
+
+        if (alertBox) alertBox.classList.add('hidden');
+
+        if (mode === 'store') {
+            if (adminTab) { adminTab.classList.remove('active'); adminTab.classList.add('text-secondary'); }
+            if (storeTab) { storeTab.classList.add('active'); storeTab.classList.remove('text-secondary'); }
+            if (modeInput) modeInput.value = 'store';
+            if (labelUser) labelUser.textContent = 'Firm ID *';
+            if (userInput) { userInput.placeholder = 'Enter Firm ID (e.g. MED0001)'; userInput.value = ''; }
+            if (submitTxt) submitTxt.textContent = 'Sign In to Store Portal';
+            if (footerTxt) footerTxt.innerHTML = '&bull; Demo Store Accounts: <code>MED0001</code> to <code>MED0005</code> &bull; Password: <code>BCWA@123</code>';
+        } else {
+            if (storeTab) { storeTab.classList.remove('active'); storeTab.classList.add('text-secondary'); }
+            if (adminTab) { adminTab.classList.add('active'); adminTab.classList.remove('text-secondary'); }
+            if (modeInput) modeInput.value = 'admin';
+            if (labelUser) labelUser.textContent = 'Officer ID / Username *';
+            if (userInput) { userInput.placeholder = 'Enter Officer ID (e.g. VIN2821)'; userInput.value = ''; }
+            if (submitTxt) submitTxt.textContent = 'Sign In to Admin Portal';
+            if (footerTxt) footerTxt.innerHTML = '&bull; Public registration disabled. Only System Administrator can grant officer credentials.';
+        }
+    },
+
     bindAuth() {
         const loginForm = document.getElementById('form-login');
         const logoutBtn = document.getElementById('btn-logout');
 
         loginForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const mode = document.getElementById('login-mode')?.value || 'admin';
             const usernameInput = document.getElementById('login-username');
             const passwordInput = document.getElementById('login-password');
             const username = usernameInput ? usernameInput.value.trim() : '';
@@ -68,11 +100,14 @@ const BCWAApp = {
 
             if (alertBox) alertBox.classList.add('hidden');
 
+            const endpoint = mode === 'store' ? '/api/auth/store-login' : '/api/auth/login';
+            const payload = mode === 'store' ? { firm_id: username, password } : { officer_id: username, username, password };
+
             try {
-                const res = await fetch('/api/auth/login', {
+                const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ officer_id: username, username, password })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await res.json();
@@ -82,7 +117,7 @@ const BCWAApp = {
                     this.renderAuthenticatedUI();
                     return;
                 } else if (alertBox) {
-                    alertBox.textContent = data.error || 'Invalid Officer ID or Password';
+                    alertBox.textContent = data.error || 'Invalid Credentials';
                     alertBox.classList.remove('hidden');
                     return;
                 }
@@ -152,18 +187,33 @@ const BCWAApp = {
         document.getElementById('login-screen')?.classList.add('hidden');
         document.querySelector('.app-layout')?.classList.remove('hidden');
 
+        const adminNav = document.getElementById('admin-nav-menu');
+        const storeNav = document.getElementById('store-nav-menu');
+
         if (this.currentUser) {
             const avatarEl = document.getElementById('sidebar-avatar');
             const userNameEl = document.getElementById('sidebar-user-name') || document.getElementById('current-user-name');
             const userRoleEl = document.getElementById('sidebar-user-role') || document.getElementById('current-user-role');
             
-            if (avatarEl) avatarEl.textContent = this.currentUser.name ? this.currentUser.name.charAt(0).toUpperCase() : 'V';
-            if (userNameEl) userNameEl.textContent = this.currentUser.name || 'Vinayak';
-            if (userRoleEl) userRoleEl.textContent = this.currentUser.role || 'Administrator';
+            if (avatarEl) avatarEl.textContent = this.currentUser.name ? this.currentUser.name.charAt(0).toUpperCase() : 'U';
+            if (userNameEl) userNameEl.textContent = this.currentUser.name || 'User';
+
+            if (this.currentUser.role === 'Store') {
+                if (userRoleEl) userRoleEl.textContent = `Firm ID: ${this.currentUser.firm_id} • Store Owner`;
+                if (adminNav) adminNav.classList.add('hidden');
+                if (storeNav) storeNav.classList.remove('hidden');
+                this.switchTab('store-dashboard');
+                this.loadStoreDashboardData();
+            } else {
+                if (userRoleEl) userRoleEl.textContent = `Officer ID: ${this.currentUser.officer_id || 'VIN2821'} • Administrator`;
+                if (storeNav) storeNav.classList.add('hidden');
+                if (adminNav) adminNav.classList.remove('hidden');
+                this.switchTab('dashboard');
+                this.loadDashboardData();
+            }
         }
 
         this.resetInactivityTimer();
-        this.loadDashboardData();
         lucide.createIcons();
     },
 
@@ -221,9 +271,210 @@ const BCWAApp = {
             case 'admin':
                 this.loadAdminUsers();
                 break;
+            case 'store-dashboard':
+                this.loadStoreDashboardData();
+                break;
+            case 'store-documents':
+                this.loadStoreDocuments();
+                break;
+            case 'store-renewals':
+                this.loadStoreRenewals();
+                break;
+            case 'store-notifications':
+                this.loadStoreNotifications();
+                break;
+            case 'store-profile':
+                this.loadStoreProfile();
+                break;
         }
 
         lucide.createIcons();
+    },
+
+    // -------------------------------------------------------------------------
+    // STORE SELF-SERVICE PORTAL FUNCTIONS
+    // -------------------------------------------------------------------------
+    async loadStoreDashboardData() {
+        try {
+            const res = await fetch('/api/store/dashboard');
+            if (res.status === 403) return;
+            const data = await res.json();
+
+            const nameEl = document.getElementById('sd-store-name');
+            const badgeEl = document.getElementById('sd-firm-badge');
+            const scoreEl = document.getElementById('sd-compliance-score');
+            const dlStatusEl = document.getElementById('sd-dl-status');
+            const dlExpEl = document.getElementById('sd-dl-expiry');
+            const fssaiStatusEl = document.getElementById('sd-fssai-status');
+            const fssaiExpEl = document.getElementById('sd-fssai-expiry');
+            const pppStatusEl = document.getElementById('sd-ppp-status');
+            const pppExpEl = document.getElementById('sd-ppp-expiry');
+
+            if (nameEl) nameEl.textContent = data.store_name || 'Medical Store Dashboard';
+            if (badgeEl) badgeEl.textContent = `Firm ID: ${data.firm_id}`;
+            if (scoreEl) scoreEl.textContent = `${data.compliance_score}%`;
+            if (dlStatusEl) dlStatusEl.textContent = data.dl_status;
+            if (dlExpEl) dlExpEl.textContent = `Exp: ${data.dl_expiry_date}`;
+            if (fssaiStatusEl) fssaiStatusEl.textContent = data.fssai_status;
+            if (fssaiExpEl) fssaiExpEl.textContent = `Exp: ${data.fssai_expiry_date}`;
+            if (pppStatusEl) pppStatusEl.textContent = data.ppp_status;
+            if (pppExpEl) pppExpEl.textContent = `Exp: ${data.ppp_expiry_date}`;
+
+            const notifContainer = document.getElementById('sd-notifications-list');
+            if (notifContainer && data.notifications) {
+                if (data.notifications.length === 0) {
+                    notifContainer.innerHTML = '<div class="text-center text-muted p-3">No pending notifications. All license compliance active.</div>';
+                } else {
+                    notifContainer.innerHTML = data.notifications.map(n => `
+                        <div class="p-3 mb-2" style="border-left: 4px solid ${n.type === 'Danger' ? '#EF4444' : '#F59E0B'}; background:#F8FAFC; border-radius:4px;">
+                            <strong>${n.title}</strong>
+                            <p class="text-secondary mb-1" style="font-size:12px;">${n.message}</p>
+                            <small class="text-muted">${n.created_at}</small>
+                        </div>
+                    `).join('');
+                }
+            }
+            lucide.createIcons();
+        } catch (e) {
+            console.error('Error loading store dashboard:', e);
+        }
+    },
+
+    async loadStoreDocuments() {
+        try {
+            const res = await fetch('/api/store/documents');
+            const data = await res.json();
+            const grid = document.getElementById('sd-document-grid');
+            if (!grid) return;
+
+            if (!data.documents || data.documents.length === 0) {
+                grid.innerHTML = '<div class="text-center text-muted p-4 col-span-full">No documents found in vault.</div>';
+                return;
+            }
+
+            grid.innerHTML = data.documents.map(d => `
+                <div class="card p-3 shadow-sm" style="display:flex; flex-direction:column; justify-content:space-between;">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="badge badge-info">${d.category}</span>
+                            <span class="badge ${d.quality_status === 'Passed' ? 'badge-success' : 'badge-warning'}">${d.quality_status}</span>
+                        </div>
+                        <h4 style="font-size:15px; margin-bottom:4px;">${d.title}</h4>
+                        <div class="text-secondary" style="font-size:12px; margin-bottom:8px;">Ref #: <code>${d.document_number || 'N/A'}</code></div>
+                        <div class="text-secondary" style="font-size:12px;">Expiry Date: <strong>${d.expiry_date || 'N/A'}</strong></div>
+                    </div>
+                    <div class="d-flex gap-2 mt-3 pt-2" style="border-top:1px solid #F1F5F9;">
+                        <a href="${d.file_url}" target="_blank" class="btn btn-secondary btn-sm w-50 text-center"><i data-lucide="eye"></i> Preview</a>
+                        <a href="/api/store/documents/${d.id}/download" class="btn btn-primary btn-sm w-50 text-center"><i data-lucide="download"></i> Download</a>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        } catch (e) {
+            console.error('Error loading store documents:', e);
+        }
+    },
+
+    async loadStoreRenewals() {
+        try {
+            const res = await fetch('/api/store/renewals');
+            const data = await res.json();
+            const tbody = document.querySelector('#table-store-renewals tbody');
+            if (!tbody) return;
+
+            if (!data.renewals || data.renewals.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-3">No active renewal records.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.renewals.map(r => {
+                const badgeClass = r.color === 'Green' ? 'badge-success' : (r.color === 'Yellow' ? 'badge-info' : (r.color === 'Orange' ? 'badge-warning' : 'badge-danger'));
+                return `
+                    <tr>
+                        <td><strong>${r.document}</strong></td>
+                        <td>${r.expiry_date}</td>
+                        <td><strong>${r.days_remaining} Days</strong></td>
+                        <td><span class="badge ${badgeClass}">${r.status}</span></td>
+                    </tr>
+                `;
+            }).join('');
+            lucide.createIcons();
+        } catch (e) {}
+    },
+
+    async loadStoreNotifications() {
+        try {
+            const res = await fetch('/api/store/dashboard');
+            const data = await res.json();
+            const feed = document.getElementById('sd-full-notifications-feed');
+            if (feed && data.notifications) {
+                feed.innerHTML = data.notifications.map(n => `
+                    <div class="p-3 mb-2 card" style="border-left: 4px solid ${n.type === 'Danger' ? '#EF4444' : '#F59E0B'};">
+                        <strong>${n.title}</strong>
+                        <p class="text-secondary mb-1" style="font-size:12px;">${n.message}</p>
+                        <small class="text-muted">${n.created_at}</small>
+                    </div>
+                `).join('');
+            }
+            lucide.createIcons();
+        } catch (e) {}
+    },
+
+    async loadStoreProfile() {
+        try {
+            const res = await fetch('/api/store/profile');
+            const data = await res.json();
+
+            const fid = document.getElementById('sp-firm-id');
+            const sname = document.getElementById('sp-store-name');
+            const oname = document.getElementById('sp-owner-name');
+            const email = document.getElementById('sp-email');
+            const mobile = document.getElementById('sp-mobile');
+            const addr = document.getElementById('sp-address');
+
+            if (fid) fid.textContent = data.firm_id || '--';
+            if (sname) sname.textContent = data.store_name || '--';
+            if (oname) oname.textContent = data.owner_name || '--';
+            if (email) email.textContent = data.email || '--';
+            if (mobile) mobile.textContent = data.mobile || '--';
+            if (addr) addr.textContent = data.address || '--';
+        } catch (e) {}
+    },
+
+    async requestStorePasswordReset() {
+        try {
+            const res = await fetch('/api/store/request-password-reset', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                alert('🔑 Password Reset Request Submitted!\n\nYour request has been logged. The BCWA System Administrator will issue updated credentials.');
+            }
+        } catch (e) {
+            alert('Failed submitting password reset request.');
+        }
+    },
+
+    async sendTestWhatsApp() {
+        try {
+            const res = await fetch('/api/admin/send-test-whatsapp', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                alert(`💬 WhatsApp Test Dispatch Successful!\n\nTarget: ${data.details.target}\nStatus: ${data.message}`);
+            } else {
+                alert(`❌ WhatsApp Dispatch Failed!\n\n${data.error || data.message}`);
+            }
+        } catch (e) {
+            alert('Error triggering WhatsApp test.');
+        }
+    },
+
+    async sendTestBoth() {
+        try {
+            const res = await fetch('/api/admin/send-test-both', { method: 'POST' });
+            const data = await res.json();
+            alert(`📢 Dual-Channel Test Results:\n\n• Email Status: ${data.email_status}\n• WhatsApp Status: ${data.whatsapp_status}`);
+        } catch (e) {
+            alert('Error triggering dual-channel test.');
+        }
     },
 
     bindGlobalSearch() {

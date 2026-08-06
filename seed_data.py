@@ -241,5 +241,34 @@ def generate_seed_data():
     except Exception as e:
         print(f"[SEED UPDATE NOTICE] {e}")
 
+    # Seed Demo Store Accounts (MED0001 to MED0005) & Sample PDFs
+    try:
+        from database import create_or_update_store_account
+        from sample_pdf_generator import ensure_sample_pdfs_for_store
+
+        demo_stores = [
+            ("MED0001", "MS-1001", "Vinayak Bhosale", "Apex Chemist & Druggists"),
+            ("MED0002", "MS-1002", "Rajesh Sharma", "Lifeline Medicare"),
+            ("MED0003", "MS-1003", "Amit Patil", "Care & Cure Pharma"),
+            ("MED0004", "MS-1004", "Sunil Verma", "Wellness Medicals"),
+            ("MED0005", "MS-1005", "Pooja Mehta", "National Pharmacy")
+        ]
+
+        for firm_id, store_id, owner_name, store_name in demo_stores:
+            create_or_update_store_account(
+                firm_id=firm_id,
+                password="BCWA@123",
+                store_id=store_id,
+                owner_name=owner_name,
+                store_name=store_name,
+                email="bhosalevinayakwe@gmail.com",
+                mobile="8766759824",
+                status="Active"
+            )
+            ensure_sample_pdfs_for_store(store_id, store_name)
+        print("Demo Store Accounts (MED0001-MED0005) seeded successfully.")
+    except Exception as e:
+        print(f"[STORE ACCOUNTS SEED NOTICE] {e}")
+
 if __name__ == '__main__':
     generate_seed_data()
