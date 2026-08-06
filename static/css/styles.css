@@ -309,30 +309,38 @@ body {
 /* REUSABLE PREMIUM ACTION BUTTON COMPONENT (.action-btn) */
 /* ==================================================================== */
 .action-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 140px;
-    height: 46px;
-    border-radius: 12px;
-    font-size: 15px;
-    font-weight: 600;
-    gap: 10px;
-    padding: 0 16px;
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-    text-decoration: none;
-    line-height: 1;
-    white-space: nowrap;
+    width: 140px !important;
+    min-width: 140px !important;
+    max-width: 140px !important;
+    height: 46px !important;
+    min-height: 46px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+    border-radius: 12px !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    padding: 0 18px !important;
+    box-sizing: border-box !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
+    text-decoration: none !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
     border: 1.5px solid transparent;
     background-color: #FFFFFF;
+    flex-shrink: 0 !important;
 }
 
-.action-btn i, .action-btn svg {
-    width: 20px;
-    height: 20px;
-    flex-shrink: 0;
+.action-btn i, .action-btn svg, .action-btn [data-lucide] {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    max-width: 20px !important;
+    max-height: 20px !important;
+    flex-shrink: 0 !important;
 }
 
 .action-btn:hover {
@@ -346,38 +354,38 @@ body {
 
 /* Variant 1: Resend (Blue Outline, Light Blue Hover) */
 .btn-action-resend {
-    border-color: #2563EB;
-    color: #2563EB;
-    background-color: #FFFFFF;
+    border-color: #2563EB !important;
+    color: #2563EB !important;
+    background-color: #FFFFFF !important;
 }
 .btn-action-resend:hover {
-    background-color: #EFF6FF;
-    border-color: #1D4ED8;
-    color: #1D4ED8;
+    background-color: #EFF6FF !important;
+    border-color: #1D4ED8 !important;
+    color: #1D4ED8 !important;
 }
 
 /* Variant 2: Preview (Gray Outline, Light Gray Hover) */
 .btn-action-preview {
-    border-color: #4B5563;
-    color: #374151;
-    background-color: #FFFFFF;
+    border-color: #4B5563 !important;
+    color: #374151 !important;
+    background-color: #FFFFFF !important;
 }
 .btn-action-preview:hover {
-    background-color: #F3F4F6;
-    border-color: #1F2937;
-    color: #111827;
+    background-color: #F3F4F6 !important;
+    border-color: #1F2937 !important;
+    color: #111827 !important;
 }
 
-/* Variant 3: Download PDF (Red Outline, Light Red Hover) */
+/* Variant 3: Download PDF / PDF (Red Outline, Light Red Hover) */
 .btn-action-download {
-    border-color: #DC2626;
-    color: #DC2626;
-    background-color: #FFFFFF;
+    border-color: #DC2626 !important;
+    color: #DC2626 !important;
+    background-color: #FFFFFF !important;
 }
 .btn-action-download:hover {
-    background-color: #FEF2F2;
-    border-color: #B91C1C;
-    color: #B91C1C;
+    background-color: #FEF2F2 !important;
+    border-color: #B91C1C !important;
+    color: #B91C1C !important;
 }
 
 .content-container {

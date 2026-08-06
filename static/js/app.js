@@ -960,10 +960,10 @@ const BCWAApp = {
                             <td><span class="badge ${l.delivery_status === 'Success' ? 'badge-success' : 'badge-danger'}">${l.delivery_status}</span></td>
                             <td><small class="text-muted">${l.sent_at}</small></td>
                             <td>
-                                <div style="display:flex; gap:8px; align-items:center;">
+                                <div style="display:flex; gap:10px; align-items:center;">
                                     <button class="action-btn btn-action-resend" onclick="BCWAApp.resendEmailNotice('${l.id}')" title="Resend Email"><i data-lucide="send"></i> Resend</button>
                                     <button class="action-btn btn-action-preview" onclick="window.open('/api/notifications/logs/${l.id}/preview', '_blank')" title="Preview Email HTML"><i data-lucide="eye"></i> Preview</button>
-                                    <button class="action-btn btn-action-download" onclick="window.open('/api/notifications/logs/${l.id}/pdf', '_blank')" title="Download PDF Notice"><i data-lucide="download"></i> Download PDF</button>
+                                    <button class="action-btn btn-action-download" onclick="window.open('/api/notifications/logs/${l.id}/pdf', '_blank')" title="Download PDF Notice"><i data-lucide="download"></i> PDF</button>
                                 </div>
                             </td>
                         </tr>
