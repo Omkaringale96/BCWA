@@ -243,11 +243,15 @@ def scan_and_queue_expiring_reminders():
                         subject = generate_email_subject('Drug License', stage)
                         html = generate_reminder_html_email(owner_name, store_name, 'Drug License', doc_num, dl_expiry_str, stage)
                         
+                        owner_mobile = s.get('owner_mobile') or s.get('contact_phone') or '8766759824'
                         queue_payload = {
                             'id': f"Q-DL-{uuid.uuid4().hex[:8].upper()}",
                             'store_id': store_id,
+                            'store_name': store_name,
                             'recipient_name': owner_name,
                             'recipient_email': owner_email,
+                            'recipient_mobile': owner_mobile,
+                            'channel': 'both',
                             'document_type': 'Drug License',
                             'document_number': doc_num,
                             'days_remaining': stage,
@@ -280,11 +284,15 @@ def scan_and_queue_expiring_reminders():
                         subject = generate_email_subject('Food License (FSSAI)', stage)
                         html = generate_reminder_html_email(owner_name, store_name, 'Food License (FSSAI)', doc_num, fssai_expiry_str, stage)
 
+                        owner_mobile = s.get('owner_mobile') or s.get('contact_phone') or '8766759824'
                         queue_payload = {
                             'id': f"Q-FS-{uuid.uuid4().hex[:8].upper()}",
                             'store_id': store_id,
+                            'store_name': store_name,
                             'recipient_name': owner_name,
                             'recipient_email': owner_email,
+                            'recipient_mobile': owner_mobile,
+                            'channel': 'both',
                             'document_type': 'Food License (FSSAI)',
                             'document_number': doc_num,
                             'days_remaining': stage,
