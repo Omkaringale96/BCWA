@@ -112,12 +112,33 @@ def compress_response(response):
         
     return response
 
+def start_keep_alive_engine():
+    """Background thread that pings server health endpoint every 10 minutes to prevent Render free-tier idle spin-down."""
+    import urllib.request
+    import threading
+    def ping_worker():
+        time.sleep(30)
+        url = os.environ.get('RENDER_EXTERNAL_URL', 'https://bcwa.onrender.com').rstrip('/') + '/api/health'
+        while True:
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'BCWA-KeepAlive/1.0'})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    logging.info(f"[KEEP-ALIVE] Self-ping successful ({url}) - Status {resp.status}")
+            except Exception as e:
+                logging.warning(f"[KEEP-ALIVE NOTICE] Self-ping ({url}): {e}")
+            time.sleep(600)
+
+    thread = threading.Thread(target=ping_worker, daemon=True)
+    thread.start()
+    logging.info("[KEEP-ALIVE] Render Keep-Alive daemon thread started.")
+
 import uuid
 SERVER_STARTUP_ID = uuid.uuid4().hex
 
 init_db()
 generate_seed_data()
 start_background_notification_scheduler()
+start_keep_alive_engine()
 
 # Lockout tracker for failed login attempts (5 attempts -> 5 minute lockout)
 failed_attempts_tracker = {}
@@ -1338,6 +1359,14 @@ def handle_500_error(e):
             'environment': app.config.get('ENV')
         }), 500
     return jsonify({'error': 'An internal server error occurred.'}), 500
+
+@app.route('/api/health')
+def api_health():
+    return jsonify({
+        'status': 'online',
+        'service': 'BCWA Portal',
+        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    })
 
 @app.route('/')
 def index():
