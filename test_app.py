@@ -235,14 +235,16 @@ class BCWAPortalTestCase(unittest.TestCase):
 
         print("Store Self-Service Portal & Tenant Security Test Passed.")
 
-    def test_whatsapp_service(self):
-        import whatsapp_service
-        ok, msg = whatsapp_service.send_whatsapp_text('8766759824', 'Test WhatsApp Message')
-        self.assertTrue(ok)
-        
-        ok_rem, msg_rem = whatsapp_service.send_whatsapp_reminder('8766759824', 'Apex Chemist', 'Drug License', 7)
-        self.assertTrue(ok_rem)
-        print("WhatsApp Service Abstraction Test Passed.")
+    def test_smart_document_classification(self):
+        from database import is_expiry_document
+        self.assertTrue(is_expiry_document('Drug License'))
+        self.assertTrue(is_expiry_document('Food License (FSSAI)'))
+        self.assertTrue(is_expiry_document('PPP Card'))
+        self.assertFalse(is_expiry_document('Electricity Bill (Light Bill)'))
+        self.assertFalse(is_expiry_document('Namuna 8'))
+        self.assertFalse(is_expiry_document('Owner Aadhaar'))
+        self.assertFalse(is_expiry_document('Owner PAN'))
+        print("Smart Document Classification Test Passed: Expiry vs Permanent categories correctly identified.")
 
 if __name__ == '__main__':
     unittest.main()

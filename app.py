@@ -369,7 +369,7 @@ def api_check_session():
             try:
                 last_act = datetime.fromisoformat(last_act_str)
                 user_role = session.get('user', {}).get('role')
-                max_inactivity = 900  # 15 min for both Admin and Store users
+                max_inactivity = 300  # 5 minutes (300 seconds) inactivity timeout
                 if (datetime.now() - last_act).total_seconds() > max_inactivity:
                     user_name = session.get('user', {}).get('name', 'User')
                     audit_security_log("Session Timeout", f"Server-side session expired due to inactivity for '{user_name}'.", user_name=user_name)
@@ -610,6 +610,18 @@ def api_upload_document():
     if not file_ok:
         return jsonify({'success': False, 'error': file_err}), 400
 
+    from database import is_expiry_document
+    is_expiry_doc = is_expiry_document(category)
+
+    if not is_expiry_doc:
+        issue_date = None
+        expiry_date = None
+        reminder_enabled = False
+        renewal_required = False
+    else:
+        reminder_enabled = request.form.get('reminder_enabled', 'true').lower() == 'true'
+        renewal_required = request.form.get('renewal_required', 'true').lower() == 'true'
+
     store = get_medical_store(store_id) if store_id else None
     firm_id = store.get('firm_id', 'BCWA-MED-000001') if store else 'BCWA-MED-000001'
 
@@ -666,6 +678,9 @@ def api_upload_document():
         'uploaded_by': uploaded_by,
         'version': new_version,
         'is_latest': True,
+        'is_expiry_doc': is_expiry_doc,
+        'reminder_enabled': reminder_enabled,
+        'renewal_required': renewal_required,
         'issue_date': issue_date,
         'expiry_date': expiry_date
     }
@@ -679,6 +694,16 @@ def api_upload_document():
         'file_url': file_url,
         'quality_status': res['quality_status'],
         'quality_notes': res['quality_notes']
+    })
+
+@app.route('/api/admin/document-categories', methods=['GET'])
+@admin_required
+def api_get_document_categories():
+    from database import EXPIRY_DOC_CATEGORIES, PERMANENT_DOC_CATEGORIES
+    return jsonify({
+        'success': True,
+        'expiry_categories': sorted(list(EXPIRY_DOC_CATEGORIES)),
+        'permanent_categories': sorted(list(PERMANENT_DOC_CATEGORIES))
     })
 
 @app.route('/api/documents/<doc_id>/versions', methods=['GET'])
@@ -1271,48 +1296,6 @@ def api_store_request_password_reset():
 
     audit_security_log("Password Reset Request", f"Store '{store_name}' ({firm_id}) requested password reset.", user_name=user.get('name'))
     return jsonify({'success': True, 'message': 'Password reset request submitted to Administrator.'})
-
-# -----------------------------------------------------------------------------
-# ADMIN WHATSAPP & MULTI-CHANNEL TEST APIS
-# -----------------------------------------------------------------------------
-@app.route('/api/admin/send-test-whatsapp', methods=['POST'])
-def api_admin_send_test_whatsapp():
-    user = session.get('user')
-    if not user or user.get('role') != 'Administrator':
-        return jsonify({'success': False, 'error': 'Administrator access required'}), 403
-
-    from whatsapp_service import send_whatsapp_text
-    target_mobile = os.environ.get('TEST_WHATSAPP_NUMBER', '8766759824')
-    msg = f"🟢 *BCWA WhatsApp Integration Test Successful*\n\nServer Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\nEnvironment: {app.config.get('ENV', 'development').upper()}\nStatus: Verified Operational."
-
-    ok, status_msg = send_whatsapp_text(target_mobile, msg)
-    return jsonify({
-        'success': ok,
-        'message': status_msg,
-        'details': {
-            'target': target_mobile,
-            'response': status_msg
-        }
-    })
-
-@app.route('/api/admin/send-test-both', methods=['POST'])
-def api_admin_send_test_both():
-    user = session.get('user')
-    if not user or user.get('role') != 'Administrator':
-        return jsonify({'success': False, 'error': 'Administrator access required'}), 403
-
-    from whatsapp_service import send_whatsapp_text
-    from email_service import send_admin_test_email
-
-    email_res = send_admin_test_email()
-    target_mobile = os.environ.get('TEST_WHATSAPP_NUMBER', '8766759824')
-    wa_ok, wa_msg = send_whatsapp_text(target_mobile, f"🟢 *BCWA Dual-Channel Notification Test*\nBoth Email and WhatsApp dispatches tested successfully.")
-
-    return jsonify({
-        'success': email_res.get('success') and wa_ok,
-        'email_status': email_res.get('response', email_res.get('error')),
-        'whatsapp_status': wa_msg
-    })
 
 @app.errorhandler(500)
 def handle_500_error(e):

@@ -1135,6 +1135,104 @@
         </div>
     </div>
 
+    <!-- DOCUMENT UPLOAD MODAL (SMART CLASSIFICATION) -->
+    <div class="modal-overlay" id="modal-upload-document">
+        <div class="modal-content" style="max-width:560px;">
+            <div class="modal-header">
+                <h3><i data-lucide="upload-cloud" style="width:22px; height:22px; color:#2563EB;"></i> Upload Document</h3>
+                <button class="btn-close" onclick="closeModal('modal-upload-document')">&times;</button>
+            </div>
+            <form id="form-upload-document" onsubmit="BCWAApp.submitUploadDocument(event)">
+                <div class="modal-body">
+                    <div class="form-group mb-3">
+                        <label>Medical Store *</label>
+                        <select id="upload-doc-store-id" class="form-control" required></select>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label>Document Category *</label>
+                        <select id="upload-doc-category" class="form-control" required onchange="BCWAApp.toggleUploadExpiryFields()">
+                            <optgroup label="📋 Expiry Compliance Documents (Auto-Reminders &amp; Alerts)">
+                                <option value="Drug License" selected>Drug License (20B/21B)</option>
+                                <option value="Food License (FSSAI)">Food License (FSSAI)</option>
+                                <option value="Pharmacist Registration Certificate">Pharmacist Registration Certificate</option>
+                                <option value="State Pharmacy Council Registration">State Pharmacy Council Registration</option>
+                                <option value="PPP Card">PPP Card / PPP Registration</option>
+                                <option value="Shop &amp; Establishment License">Shop &amp; Establishment License</option>
+                                <option value="Biomedical Waste Authorization">Biomedical Waste Authorization</option>
+                                <option value="Fire NOC">Fire NOC</option>
+                                <option value="Pollution Authorization">Pollution Authorization</option>
+                                <option value="GST Registration">GST Registration</option>
+                            </optgroup>
+                            <optgroup label="📁 Permanent Documents (No Expiry / No Reminders)">
+                                <option value="Electricity Bill (Light Bill)">Electricity Bill (Light Bill)</option>
+                                <option value="Namuna 8">Namuna 8</option>
+                                <option value="Owner Aadhaar">Owner Aadhaar</option>
+                                <option value="Owner PAN">Owner PAN Card</option>
+                                <option value="Owner Photograph">Owner Photograph</option>
+                                <option value="Shop Photograph">Shop Photograph</option>
+                                <option value="Cancelled Cheque">Cancelled Cheque / Passbook</option>
+                                <option value="Partnership Deed">Partnership Deed / Rent Agreement</option>
+                                <option value="Property Documents">Property / Tax Documents</option>
+                                <option value="Other Documents">Other Supporting Documents</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label>Document Title *</label>
+                        <input type="text" id="upload-doc-title" class="form-control" required placeholder="e.g. Drug License 20B/21B Copy 2026">
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label>Document Number (License / Reference #)</label>
+                        <input type="text" id="upload-doc-number" class="form-control" placeholder="e.g. MH-TZ4-102938">
+                    </div>
+
+                    <!-- DYNAMIC EXPIRY FIELDS CONTAINER -->
+                    <div id="upload-expiry-fields" style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:14px; margin-bottom:16px;">
+                        <div class="badge badge-info mb-2" style="font-size:11px;">ℹ️ Expiry Document Tracking Enabled</div>
+                        <div class="grid grid-2 gap-3 mb-2">
+                            <div class="form-group">
+                                <label>Issue Date *</label>
+                                <input type="date" id="upload-doc-issue-date" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Expiry Date *</label>
+                                <input type="date" id="upload-doc-expiry-date" class="form-control">
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:16px; margin-top:8px;">
+                            <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+                                <input type="checkbox" id="upload-doc-reminder" checked>
+                                <span>Enable Email Reminders</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+                                <input type="checkbox" id="upload-doc-renewal-req" checked>
+                                <span>Renewal Required</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label>Select Document File *</label>
+                        <input type="file" id="upload-doc-file" class="form-control" required accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx">
+                        <small class="text-secondary">Max size: 10 MB. Supported formats: PDF, JPG, PNG, DOCX, XLSX</small>
+                    </div>
+
+                    <div id="upload-doc-error" class="text-danger mt-2" style="font-size:13px; display:none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-upload-document')">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-submit-upload-doc">
+                        <i data-lucide="upload"></i>
+                        <span>Upload File</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- DOCUMENT VERSION HISTORY & PREVIEW MODAL -->
     <div class="modal-overlay" id="modal-doc-versions">
         <div class="modal-content modal-lg">

@@ -4,8 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const BCWAApp = {
     inactivityTimer: null,
-    INACTIVITY_TIMEOUT_MS: 900000, // 15 minutes (900 seconds) inactivity auto-logout
-
+    INACTIVITY_TIMEOUT_MS: 300000, // 5 minutes (300 seconds) inactivity auto-logout
+    
     init() {
         this.bindAuth();
         this.bindNavigation();
@@ -19,7 +19,7 @@ const BCWAApp = {
     },
 
     bindInactivityTracker() {
-        const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'pointermove'];
+        const events = ['mousemove', 'mousedown', 'click', 'keydown', 'scroll', 'touchstart', 'pointermove'];
         events.forEach(evt => {
             window.addEventListener(evt, () => this.resetInactivityTimer(), { passive: true });
         });
@@ -40,7 +40,7 @@ const BCWAApp = {
         } catch (e) {}
         
         this.currentUser = null;
-        this.showLoginScreen('Session expired due to inactivity.');
+        this.showLoginScreen('You have been automatically signed out due to 5 minutes of inactivity. Please sign in again.');
     },
 
     preventBackNavigation() {
@@ -515,30 +515,6 @@ const BCWAApp = {
         }
     },
 
-    async sendTestWhatsApp() {
-        try {
-            const res = await fetch('/api/admin/send-test-whatsapp', { method: 'POST' });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                alert(`💬 WhatsApp Test Dispatch Successful!\n\nTarget: ${data.details.target}\nStatus: ${data.message}`);
-            } else {
-                alert(`❌ WhatsApp Dispatch Failed!\n\n${data.error || data.message}`);
-            }
-        } catch (e) {
-            alert('Error triggering WhatsApp test.');
-        }
-    },
-
-    async sendTestBoth() {
-        try {
-            const res = await fetch('/api/admin/send-test-both', { method: 'POST' });
-            const data = await res.json();
-            alert(`📢 Dual-Channel Test Results:\n\n• Email Status: ${data.email_status}\n• WhatsApp Status: ${data.whatsapp_status}`);
-        } catch (e) {
-            alert('Error triggering dual-channel test.');
-        }
-    },
-
     bindGlobalSearch() {
         const input = document.getElementById('global-search-input');
         if (!input) return;
@@ -811,9 +787,9 @@ const BCWAApp = {
                     </td>
                     <td>${doc.expiry_date || 'N/A'}</td>
                     <td>
-                        <div style="display:flex; gap:4px;">
-                            <a href="${doc.file_url}" target="_blank" class="btn btn-secondary btn-sm">Preview</a>
-                            <button class="btn btn-secondary btn-sm" onclick="BCWAApp.viewDocumentVersions('${doc.id}')">v${doc.version || 1} Details</button>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <a href="${doc.file_url}" target="_blank" class="action-btn btn-action-preview"><i data-lucide="eye"></i> Preview</a>
+                            <button class="action-btn btn-action-resend" onclick="BCWAApp.viewDocumentVersions('${doc.id}')"><i data-lucide="history"></i> v${doc.version || 1} Details</button>
                         </div>
                     </td>
                 </tr>
@@ -984,9 +960,11 @@ const BCWAApp = {
                             <td><span class="badge ${l.delivery_status === 'Success' ? 'badge-success' : 'badge-danger'}">${l.delivery_status}</span></td>
                             <td><small class="text-muted">${l.sent_at}</small></td>
                             <td>
-                                <button class="btn btn-secondary btn-sm me-1" onclick="BCWAApp.resendEmailNotice('${l.id}')" title="Resend Email"><i data-lucide="send"></i> Resend</button>
-                                <button class="btn btn-secondary btn-sm me-1" onclick="window.open('/api/notifications/logs/${l.id}/preview', '_blank')" title="Preview Email HTML"><i data-lucide="eye"></i> Preview</button>
-                                <button class="btn btn-secondary btn-sm" onclick="window.open('/api/notifications/logs/${l.id}/pdf', '_blank')" title="Download PDF Notice"><i data-lucide="download"></i> PDF</button>
+                                <div style="display:flex; gap:8px; align-items:center;">
+                                    <button class="action-btn btn-action-resend" onclick="BCWAApp.resendEmailNotice('${l.id}')" title="Resend Email"><i data-lucide="send"></i> Resend</button>
+                                    <button class="action-btn btn-action-preview" onclick="window.open('/api/notifications/logs/${l.id}/preview', '_blank')" title="Preview Email HTML"><i data-lucide="eye"></i> Preview</button>
+                                    <button class="action-btn btn-action-download" onclick="window.open('/api/notifications/logs/${l.id}/pdf', '_blank')" title="Download PDF Notice"><i data-lucide="download"></i> Download PDF</button>
+                                </div>
                             </td>
                         </tr>
                     `).join('');
@@ -1289,6 +1267,7 @@ const BCWAApp = {
         document.getElementById('btn-add-store')?.addEventListener('click', () => this.openAddStoreModal());
         document.getElementById('btn-add-store-tab')?.addEventListener('click', () => this.openAddStoreModal());
         document.getElementById('btn-add-pharmacist')?.addEventListener('click', () => this.openAddPharmacistModal());
+        document.getElementById('btn-upload-document')?.addEventListener('click', () => this.openUploadDocumentModal());
         document.getElementById('btn-generate-report')?.addEventListener('click', () => openModal('modal-report'));
         document.getElementById('btn-download-pdf-report')?.addEventListener('click', () => this.downloadPDFReport());
 
@@ -1299,6 +1278,107 @@ const BCWAApp = {
                 this.loadDocumentVault(li.dataset.category);
             });
         });
+    },
+
+    toggleUploadExpiryFields() {
+        const catSelect = document.getElementById('upload-doc-category');
+        const expiryBox = document.getElementById('upload-expiry-fields');
+        if (!catSelect || !expiryBox) return;
+
+        const cat = catSelect.value;
+        const permanentCategories = [
+            "Electricity Bill (Light Bill)", "Light Bill", "Namuna 8", "Owner Aadhaar",
+            "Owner PAN", "Owner Photo", "Owner Photograph", "Shop Photo", "Shop Photograph",
+            "Store Photos", "Cancelled Cheque", "Bank Passbook", "Partnership Deed",
+            "Property Documents", "Affidavits", "Other Documents", "Other Supporting Documents"
+        ];
+
+        if (permanentCategories.includes(cat)) {
+            expiryBox.style.display = 'none';
+            const issueInput = document.getElementById('upload-doc-issue-date');
+            const expInput = document.getElementById('upload-doc-expiry-date');
+            if (issueInput) issueInput.required = false;
+            if (expInput) expInput.required = false;
+        } else {
+            expiryBox.style.display = 'block';
+            const issueInput = document.getElementById('upload-doc-issue-date');
+            const expInput = document.getElementById('upload-doc-expiry-date');
+            if (issueInput) issueInput.required = true;
+            if (expInput) expInput.required = true;
+        }
+    },
+
+    async openUploadDocumentModal() {
+        const storeSelect = document.getElementById('upload-doc-store-id');
+        if (storeSelect) {
+            storeSelect.innerHTML = '<option value="">Loading medical stores...</option>';
+            try {
+                const res = await fetch('/api/stores?limit=100');
+                const data = await res.json();
+                const stores = data.stores || [];
+                storeSelect.innerHTML = stores.map(s => `<option value="${s.id}">${s.store_name} (${s.firm_id || s.shop_code})</option>`).join('');
+            } catch (e) {
+                storeSelect.innerHTML = '<option value="">Failed loading stores</option>';
+            }
+        }
+        const form = document.getElementById('form-upload-document');
+        if (form) form.reset();
+        this.toggleUploadExpiryFields();
+        openModal('modal-upload-document');
+    },
+
+    async submitUploadDocument(e) {
+        if (e) e.preventDefault();
+        const errEl = document.getElementById('upload-doc-error');
+        if (errEl) errEl.style.display = 'none';
+
+        const storeId = document.getElementById('upload-doc-store-id').value;
+        const category = document.getElementById('upload-doc-category').value;
+        const title = document.getElementById('upload-doc-title').value.trim();
+        const docNumber = document.getElementById('upload-doc-number').value.trim();
+        const issueDate = document.getElementById('upload-doc-issue-date').value;
+        const expiryDate = document.getElementById('upload-doc-expiry-date').value;
+        const reminderEnabled = document.getElementById('upload-doc-reminder').checked;
+        const renewalRequired = document.getElementById('upload-doc-renewal-req').checked;
+        const fileInput = document.getElementById('upload-doc-file');
+
+        if (!fileInput || !fileInput.files.length) {
+            if (errEl) { errEl.textContent = 'Please select a document file to upload.'; errEl.style.display = 'block'; }
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('store_id', storeId);
+        formData.append('category', category);
+        formData.append('title', title);
+        formData.append('document_number', docNumber);
+        formData.append('issue_date', issueDate);
+        formData.append('expiry_date', expiryDate);
+        formData.append('reminder_enabled', reminderEnabled ? 'true' : 'false');
+        formData.append('renewal_required', renewalRequired ? 'true' : 'false');
+        formData.append('file', fileInput.files[0]);
+
+        const btnSubmit = document.getElementById('btn-submit-upload-doc');
+        if (btnSubmit) btnSubmit.disabled = true;
+
+        try {
+            const res = await fetch('/api/documents/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                closeModal('modal-upload-document');
+                this.loadDocumentVault();
+                alert('✅ Document uploaded successfully!');
+            } else {
+                if (errEl) { errEl.textContent = data.error || 'Upload failed.'; errEl.style.display = 'block'; }
+            }
+        } catch (err) {
+            if (errEl) { errEl.textContent = 'Network error uploading document.'; errEl.style.display = 'block'; }
+        } finally {
+            if (btnSubmit) btnSubmit.disabled = false;
+        }
     },
 
     openAddStoreModal(ocrData = null) {

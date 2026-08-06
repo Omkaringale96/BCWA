@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from supabase_client import db_table
 import notification_service
 import email_service
+from database import is_expiry_document
 
 # -----------------------------------------------------------------------------
 # REMINDER SCHEDULE STAGES (DAYS BEFORE EXPIRY)
@@ -426,6 +427,11 @@ def scan_and_queue_expiring_reminders():
         d_id = d.get('id')
         store_id = d.get('store_id')
         doc_category = d.get('category', 'Vault Document')
+        
+        # Smart Document Classification: Skip Permanent Documents from Generating Expiry Reminders
+        if not is_expiry_document(doc_category):
+            continue
+
         expiry_str = d.get('expiry_date')
         doc_num = d.get('document_number', 'N/A')
 

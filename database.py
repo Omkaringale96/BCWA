@@ -10,6 +10,65 @@ def get_db_connection():
     """Compatibility wrapper returning proxy client interface"""
     return db_table
 
+EXPIRY_DOC_CATEGORIES = {
+    "Drug License",
+    "Food License (FSSAI)",
+    "Food License",
+    "Pharmacist Registration Certificate",
+    "State Pharmacy Council Registration",
+    "PPP Card",
+    "PPP Registration",
+    "PPP Cards",
+    "Shop & Establishment License",
+    "Biomedical Waste Authorization",
+    "Fire NOC",
+    "Pollution Authorization",
+    "GST Registration"
+}
+
+PERMANENT_DOC_CATEGORIES = {
+    "Electricity Bill (Light Bill)",
+    "Light Bill",
+    "Namuna 8",
+    "Owner Aadhaar",
+    "Owner PAN",
+    "Owner Photo",
+    "Owner Photograph",
+    "Shop Photo",
+    "Shop Photograph",
+    "Store Photos",
+    "Cancelled Cheque",
+    "Bank Passbook",
+    "Partnership Deed",
+    "Property Documents",
+    "Affidavits",
+    "Rent Agreement",
+    "Cold Storage Certificate",
+    "Tax Receipt",
+    "Qualification Certificates",
+    "Appointment Letters",
+    "Acceptance Letters",
+    "Other Documents",
+    "Other Supporting Documents"
+}
+
+def is_expiry_document(category):
+    """
+    Determines whether a document category is an Expiry Document (requires expiry dates & reminders)
+    or a Permanent Document (no expiry date, no reminders, no score penalty).
+    """
+    if not category:
+        return False
+    cat_str = str(category).strip()
+    if cat_str in EXPIRY_DOC_CATEGORIES:
+        return True
+    if cat_str in PERMANENT_DOC_CATEGORIES:
+        return False
+    cat_lower = cat_str.lower()
+    if any(k in cat_lower for k in ['license', 'licence', 'fssai', 'ppp', 'noc', 'authorization', 'certificate', 'registration']):
+        return True
+    return False
+
 _CACHE = {}
 _CACHE_TTL = 300  # 5 minutes TTL
 
