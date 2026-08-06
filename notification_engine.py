@@ -248,6 +248,18 @@ def generate_email_subject(doc_name, days_remaining):
     else:
         return f"BCWA Reminder – {doc_name} expires in {days_remaining} days"
 
+def safe_insert_queue_payload(queue_payload):
+    """Safely inserts queue item with fallback for missing schema columns in remote Supabase."""
+    try:
+        db_table('notification_queue').insert(queue_payload).execute()
+    except Exception:
+        clean_payload = {k: v for k, v in queue_payload.items() if k not in ('channel', 'recipient_mobile', 'store_name')}
+        try:
+            db_table('notification_queue').insert(clean_payload).execute()
+        except Exception as inner_e:
+            logging.error(f"[QUEUE INSERT ERROR] {str(inner_e)}")
+            raise inner_e
+
 def scan_and_queue_expiring_reminders():
     """
     Scan all medical stores, pharmacists, and document vault records.
@@ -308,7 +320,7 @@ def scan_and_queue_expiring_reminders():
                             'created_at': datetime.now().isoformat()
                         }
                         try:
-                            db_table('notification_queue').insert(queue_payload).execute()
+                            safe_insert_queue_payload(queue_payload)
                             queued_count += 1
                         except Exception as e:
                             logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
@@ -350,7 +362,7 @@ def scan_and_queue_expiring_reminders():
                             'created_at': datetime.now().isoformat()
                         }
                         try:
-                            db_table('notification_queue').insert(queue_payload).execute()
+                            safe_insert_queue_payload(queue_payload)
                             queued_count += 1
                         except Exception as e:
                             logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
@@ -400,7 +412,7 @@ def scan_and_queue_expiring_reminders():
                             'created_at': datetime.now().isoformat()
                         }
                         try:
-                            db_table('notification_queue').insert(queue_payload).execute()
+                            safe_insert_queue_payload(queue_payload)
                             queued_count += 1
                         except Exception as e:
                             logging.error(f"[QUEUE INSERT ERROR] {str(e)}")
@@ -452,7 +464,7 @@ def scan_and_queue_expiring_reminders():
                         'created_at': datetime.now().isoformat()
                     }
                     try:
-                        db_table('notification_queue').insert(queue_payload).execute()
+                        safe_insert_queue_payload(queue_payload)
                         queued_count += 1
                     except Exception as e:
                         logging.error(f"[QUEUE INSERT ERROR] {str(e)}")

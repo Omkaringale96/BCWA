@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS notification_logs (
     status TEXT DEFAULT 'Sent',
     smtp_response TEXT,
     retry_count INTEGER DEFAULT 0,
+    channel TEXT DEFAULT 'email',
     sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     delivery_status TEXT DEFAULT 'Success',
     error_message TEXT,
@@ -185,6 +186,7 @@ CREATE TABLE IF NOT EXISTS notification_queue (
     days_remaining INTEGER NOT NULL,
     email_subject TEXT NOT NULL,
     email_body_html TEXT,
+    channel TEXT DEFAULT 'email',
     status TEXT DEFAULT 'Pending',
     retry_count INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 3,
@@ -193,6 +195,20 @@ CREATE TABLE IF NOT EXISTS notification_queue (
     smtp_response TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     sent_at TIMESTAMP WITH TIME ZONE
+);
+
+-- 11. STORE ACCOUNTS TABLE (Firm Self-Service Portal)
+CREATE TABLE IF NOT EXISTS store_accounts (
+    firm_id TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    store_id TEXT REFERENCES medical_stores(id) ON DELETE CASCADE,
+    owner_name TEXT NOT NULL,
+    store_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    mobile TEXT NOT NULL,
+    status TEXT DEFAULT 'Active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- INDEXES FOR OPTIMIZED QUERY PERFORMANCE
@@ -210,6 +226,7 @@ CREATE INDEX IF NOT EXISTS idx_notif_logs_store ON notification_logs(store_id);
 CREATE INDEX IF NOT EXISTS idx_notif_logs_dup ON notification_logs(store_id, document_type, days_remaining);
 CREATE INDEX IF NOT EXISTS idx_notif_queue_status ON notification_queue(status);
 CREATE INDEX IF NOT EXISTS idx_notif_queue_retry ON notification_queue(status, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_store_accounts_store_id ON store_accounts(store_id);
 
 -- ============================================================================
 -- GRANT TABLE PERMISSIONS & DISABLE RLS FOR BACKEND ACCESS
@@ -229,3 +246,5 @@ ALTER TABLE activity_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_queue DISABLE ROW LEVEL SECURITY;
+ALTER TABLE store_accounts DISABLE ROW LEVEL SECURITY;
+
