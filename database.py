@@ -240,8 +240,8 @@ def get_dashboard_stats():
     total_expired = dl_expired + fssai_expired + ppp_expired + doc_expired
     upcoming_renewals = dl_expiring + fssai_expiring + ppp_expiring
 
-    scores = [s.get('compliance_score', 100) for s in stores] if stores else [100]
-    avg_score = round(sum(scores) / len(scores), 1) if scores else 100.0
+    scores = [s.get('compliance_score', 100) for s in stores] if stores else []
+    avg_score = round(sum(scores) / len(scores), 1) if stores else 0.0
 
     recent_stores = stores[:5] if len(stores) >= 5 else stores
 
@@ -423,11 +423,14 @@ def get_medical_stores(query=None, compliance=None, status=None, page=None, limi
 def get_medical_store(store_id):
     res = db_table('medical_stores').select('*').eq('id', store_id).execute()
     if not res.data:
+        res = db_table('medical_stores').select('*').eq('firm_id', store_id).execute()
+    if not res.data:
         return None
 
+    actual_id = res.data[0].get('id', store_id)
     store = ensure_firm_id(dict(res.data[0]))
-    ph_res = db_table('pharmacists').select('*').eq('store_id', store_id).execute()
-    doc_res = db_table('documents').select('*').eq('store_id', store_id).execute()
+    ph_res = db_table('pharmacists').select('*').eq('store_id', actual_id).execute()
+    doc_res = db_table('documents').select('*').eq('store_id', actual_id).execute()
 
     store['pharmacists'] = ph_res.data
     store['documents'] = doc_res.data
@@ -436,10 +439,10 @@ def get_medical_store(store_id):
 def save_medical_store(data):
     store_id = data.get('id')
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    is_new = False
 
+    existing = get_medical_store(store_id) if store_id else None
+    is_new = existing is None
     if not store_id:
-        is_new = True
         store_id = f"MS-{random.randint(1000, 9999)}"
 
     shop_code = data.get('shop_code') or f"BCWA-BSR-{random.randint(100, 999)}"
@@ -487,6 +490,7 @@ def save_medical_store(data):
         'fssai_issue_date': data.get('fssai_issue_date') or data.get('dl_issue_date') or None,
         'fssai_expiry_date': data.get('fssai_expiry_date') or None,
         'status': data.get('status', 'Active'),
+        'firm_id': data.get('firm_id') or store_id,
         'updated_at': now_str
     }
 

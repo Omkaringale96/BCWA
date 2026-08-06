@@ -1113,7 +1113,7 @@ def get_current_store_id():
     if not is_session_valid() or not user:
         return None
     if user.get('role') == 'Store':
-        return user.get('store_id')
+        return user.get('store_id') or user.get('firm_id')
     return None
 
 @app.route('/api/store/dashboard', methods=['GET'])
@@ -1131,16 +1131,16 @@ def api_store_dashboard():
     notifs = get_notifications(store_id=store_id)
 
     today_str = datetime.now().strftime('%Y-%m-%d')
-    dl_exp = store.get('dl_expiry_date', 'N/A')
-    fssai_exp = store.get('fssai_expiry_date', 'N/A')
+    dl_exp = store.get('dl_expiry_date') or ''
+    fssai_exp = store.get('fssai_expiry_date') or ''
 
-    ppp_exp = "N/A"
+    ppp_exp = ""
     if pharmacists:
-        ppp_exp = pharmacists[0].get('ppp_expiry', 'N/A')
+        ppp_exp = pharmacists[0].get('ppp_expiry') or ''
 
-    dl_status = "Active" if dl_exp > today_str else "Expired"
-    fssai_status = "Active" if fssai_exp > today_str else "Expired"
-    ppp_status = "Active" if ppp_exp > today_str else "Expired"
+    dl_status = "Active" if dl_exp and dl_exp >= today_str else ("Expired" if dl_exp else "N/A")
+    fssai_status = "Active" if fssai_exp and fssai_exp >= today_str else ("Expired" if fssai_exp else "N/A")
+    ppp_status = "Active" if ppp_exp and ppp_exp >= today_str else ("Expired" if ppp_exp else "N/A")
 
     return jsonify({
         'store_id': store_id,
