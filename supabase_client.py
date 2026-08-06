@@ -404,44 +404,112 @@ class SupabaseResponse:
 def db_table(table_name):
     return SupabaseTableProxy(table_name)
 
+STORAGE_BUCKET = (os.environ.get('SUPABASE_STORAGE_BUCKET') or 'bcwa-documents').strip()
+DEFAULT_STORAGE_BUCKET = STORAGE_BUCKET
+
+def ensure_storage_bucket(bucket_name=STORAGE_BUCKET):
+    """
+    Checks if the specified Supabase Storage Bucket exists.
+    If missing, attempts to auto-create it with public accessibility.
+    """
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        buckets = client.storage.list_buckets()
+        existing_names = [b.name for b in buckets if hasattr(b, 'name')] if hasattr(buckets, '__iter__') else []
+        if bucket_name not in existing_names:
+            try:
+                client.storage.create_bucket(bucket_name, options={'public': True})
+                logging.info(f"[SUPABASE STORAGE] Created bucket '{bucket_name}' with public access.")
+            except Exception as e_create:
+                logging.warning(f"[SUPABASE STORAGE NOTICE] Could not auto-create bucket '{bucket_name}': {e_create}")
+        return True
+    except Exception as e:
+        logging.warning(f"[SUPABASE STORAGE NOTICE] Could not list/ensure storage bucket '{bucket_name}': {e}")
+        return False
+
 def resolve_storage_bucket_and_path(firm_id, category, filename, pharmacist_name=None):
     firm_folder = (firm_id or 'BCWA-MED-000001').strip().upper()
     cat = (category or 'Other').strip()
     cat_lower = cat.lower()
+    clean_filename = os.path.basename(filename or 'document.pdf')
 
-    if any(k in cat_lower for k in ['drug', 'food', 'fssai', 'rent', 'electricity', 'light', 'gst', 'shop act', 'namuna', 'cold storage', 'tax']):
-        bucket_name = 'store-documents'
-        file_path = f"{firm_folder}/{cat}/{filename}"
-    elif any(k in cat_lower for k in ['aadhaar', 'pan', 'photo', 'owner']):
-        bucket_name = 'owner-documents'
-        file_path = f"{firm_folder}/{cat}/{filename}"
-    elif any(k in cat_lower for k in ['pharmacist', 'ppp', 'degree', 'registration', 'appointment', 'qualification']):
-        bucket_name = 'pharmacist-documents'
-        ph_folder = pharmacist_name if pharmacist_name else "Pharmacist-01"
-        file_path = f"{firm_folder}/{ph_folder}/{cat}/{filename}"
-    elif 'inspection' in cat_lower:
-        bucket_name = 'inspection-reports'
-        file_path = f"{firm_folder}/{filename}"
+    if 'drug' in cat_lower or '20b' in cat_lower or '21b' in cat_lower:
+        cat_dir = 'DrugLicense'
+    elif 'food' in cat_lower or 'fssai' in cat_lower:
+        cat_dir = 'FoodLicense'
+    elif 'ppp' in cat_lower or 'pharmacist' in cat_lower:
+        cat_dir = 'PPP'
+    elif 'aadhaar' in cat_lower:
+        cat_dir = 'Aadhaar'
+    elif 'pan' in cat_lower:
+        cat_dir = 'PAN'
+    elif 'rent' in cat_lower:
+        cat_dir = 'RentAgreement'
+    elif 'electricity' in cat_lower or 'light' in cat_lower:
+        cat_dir = 'ElectricityBill'
+    elif 'cold' in cat_lower:
+        cat_dir = 'ColdStorage'
+    elif 'photo' in cat_lower or 'logo' in cat_lower:
+        cat_dir = 'ShopPhotos'
+    elif 'owner' in cat_lower:
+        cat_dir = 'Owner'
     else:
-        bucket_name = 'other-documents'
-        file_path = f"{firm_folder}/{filename}"
+        cat_dir = 'Other'
 
-    return bucket_name, file_path
+    file_path = f"MedicalStores/{firm_folder}/{cat_dir}/{clean_filename}"
+    return STORAGE_BUCKET, file_path
+
+def generate_document_preview_url(file_path, bucket_name=STORAGE_BUCKET):
+    """Generates public or signed URL for previewing document from Supabase Storage."""
+    client = get_supabase_client()
+    url_res, _ = get_supabase_credentials()
+    base_url = (url_res or "https://your-project.supabase.co").rstrip('/')
+    bucket = bucket_name or STORAGE_BUCKET
+
+    preview_url = f"{base_url}/storage/v1/object/public/{bucket}/{file_path}"
+
+    if client:
+        try:
+            try:
+                signed_res = client.storage.from_(bucket).create_signed_url(file_path, expires_in=3600)
+                if isinstance(signed_res, dict) and signed_res.get('signedURL'):
+                    preview_url = signed_res['signedURL']
+                elif isinstance(signed_res, dict) and signed_res.get('signed_url'):
+                    preview_url = signed_res['signed_url']
+                else:
+                    preview_url = client.storage.from_(bucket).get_public_url(file_path)
+            except Exception:
+                preview_url = client.storage.from_(bucket).get_public_url(file_path)
+        except Exception as e:
+            logging.warning(f"[PREVIEW URL NOTICE] Falling back to public URL for '{file_path}': {e}")
+
+    logging.info(f"[SUPABASE PREVIEW URL GENERATED]\n"
+                 f"  • Storage Destination: Supabase Storage\n"
+                 f"  • Bucket Name: {bucket}\n"
+                 f"  • File Path: {file_path}\n"
+                 f"  • Preview URL: {preview_url}")
+
+    return preview_url
 
 def upload_to_supabase_storage(file_obj, filename, category="Other Documents", firm_id="BCWA-MED-000001", pharmacist_name=None):
     """
-    Uploads a document to designated Supabase Storage Bucket hierarchy by Firm ID:
-    - store-documents/BCWA-MED-000001/Drug License/<filename>
-    - owner-documents/BCWA-MED-000001/Owner Aadhaar/<filename>
-    - pharmacist-documents/BCWA-MED-000001/Pharmacist-01/PPP Card/<filename>
-    - inspection-reports/BCWA-MED-000001/<filename>
-    - other-documents/BCWA-MED-000001/<filename>
+    Uploads a document to single unified Supabase Storage Bucket ('bcwa-documents'):
+    - bcwa-documents/MedicalStores/BCWA-MED-000001/DrugLicense/<filename>
+    - bcwa-documents/MedicalStores/BCWA-MED-000001/PPP/<filename>
     """
     bucket_name, file_path = resolve_storage_bucket_and_path(firm_id, category, filename, pharmacist_name)
     client = get_supabase_client()
 
+    url_res, _ = get_supabase_credentials()
+    base_url = (url_res or "https://your-project.supabase.co").rstrip('/')
+    preview_url = f"{base_url}/storage/v1/object/public/{bucket_name}/{file_path}"
+
     if client:
         try:
+            ensure_storage_bucket(bucket_name)
+
             if hasattr(file_obj, 'read'):
                 content = file_obj.read()
                 if hasattr(file_obj, 'seek'):
@@ -455,21 +523,60 @@ def upload_to_supabase_storage(file_obj, filename, category="Other Documents", f
                 file_options={"upsert": "true"}
             )
 
-            public_url = client.storage.from_(bucket_name).get_public_url(file_path)
+            try:
+                preview_url = client.storage.from_(bucket_name).get_public_url(file_path)
+            except Exception:
+                pass
+
+            logging.info(f"[SUPABASE STORAGE UPLOAD SUCCESS]\n"
+                         f"  • Upload Destination: Supabase Storage\n"
+                         f"  • Bucket Name: {bucket_name}\n"
+                         f"  • File Path: {file_path}\n"
+                         f"  • Generated Preview URL: {preview_url}")
+
             return {
                 'success': True,
-                'url': public_url,
+                'url': preview_url,
                 'bucket': bucket_name,
                 'path': file_path
             }
         except Exception as e:
-            logging.error(f"Supabase Storage upload error for bucket {bucket_name}: {e}")
+            logging.error(f"[SUPABASE STORAGE UPLOAD FAILURE]\n"
+                          f"  • Upload Destination: Supabase Storage\n"
+                          f"  • Bucket Name: {bucket_name}\n"
+                          f"  • File Path: {file_path}\n"
+                          f"  • Error: {e}")
+            logging.error(traceback.format_exc())
 
-    url, _ = get_supabase_credentials()
-    base_url = url if url else "https://your-project.supabase.co"
+    logging.info(f"[SUPABASE STORAGE STANDBY]\n"
+                 f"  • Upload Destination: Supabase Storage (Standby Mode)\n"
+                 f"  • Bucket Name: {bucket_name}\n"
+                 f"  • File Path: {file_path}\n"
+                 f"  • Generated Preview URL: {preview_url}")
+
     return {
         'success': True,
-        'url': f"{base_url}/storage/v1/object/public/{bucket_name}/{file_path}",
+        'url': preview_url,
         'bucket': bucket_name,
         'path': file_path
     }
+
+def delete_from_supabase_storage(file_path, bucket_name=STORAGE_BUCKET):
+    """Deletes an object from the specified Supabase Storage Bucket."""
+    if not file_path:
+        return True
+    client = get_supabase_client()
+    bucket = bucket_name or STORAGE_BUCKET
+    if client:
+        try:
+            client.storage.from_(bucket).remove([file_path])
+            logging.info(f"[SUPABASE STORAGE DELETE SUCCESS]\n"
+                         f"  • Destination: Supabase Storage\n"
+                         f"  • Bucket Name: {bucket}\n"
+                         f"  • File Path: {file_path}")
+            return True
+        except Exception as e:
+            logging.error(f"[SUPABASE STORAGE DELETE FAILURE] Bucket '{bucket}' | Path '{file_path}': {e}")
+            logging.error(traceback.format_exc())
+            return False
+    return True

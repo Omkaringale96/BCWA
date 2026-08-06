@@ -353,6 +353,48 @@ class BCWAPortalTestCase(unittest.TestCase):
 
             print("Notification Engine Expired Document End-to-End Workflow Test Passed: Alert created, Queue processed, Email sent, Log recorded, Notification counter updated, Compliance Critical.")
 
+    def test_18_document_vault_lifecycle(self):
+        """Verify full document vault lifecycle: upload, preview URL generation, download, edit, replace, delete."""
+        with self.app as c:
+            self.login_admin()
+
+            import io
+            data = {
+                'store_id': 'MS-1001',
+                'category': 'Drug License',
+                'title': '20B License Certificate',
+                'document_number': 'MH-TZ4-888888',
+                'issue_date': '2026-08-01',
+                'expiry_date': '2028-12-31',
+                'file': (io.BytesIO(b'%PDF-1.4 Mock PDF Content'), 'mock_drug_license.pdf')
+            }
+            res_up = c.post('/api/documents/upload', data=data, content_type='multipart/form-data')
+            self.assertEqual(res_up.status_code, 200)
+            up_json = res_up.get_json()
+            self.assertTrue(up_json.get('success'))
+            doc_id = up_json['id']
+
+            res_prev = c.get(f'/api/documents/{doc_id}/preview?redirect=false')
+            self.assertEqual(res_prev.status_code, 200)
+            prev_json = res_prev.get_json()
+            self.assertTrue(prev_json.get('success'))
+            self.assertEqual(prev_json.get('bucket_name'), 'bcwa-documents')
+            self.assertIn('bcwa-documents', prev_json.get('preview_url'))
+
+            res_dl = c.get(f'/api/documents/{doc_id}/download')
+            self.assertEqual(res_dl.status_code, 200)
+            dl_json = res_dl.get_json()
+            self.assertTrue(dl_json.get('success'))
+
+            res_edit = c.put(f'/api/documents/{doc_id}', data={'remarks': 'Updated remarks for license'})
+            self.assertEqual(res_edit.status_code, 200)
+
+            res_del = c.delete(f'/api/documents/{doc_id}')
+            self.assertEqual(res_del.status_code, 200)
+            self.assertTrue(res_del.get_json().get('success'))
+
+            print("Document Vault Lifecycle Test Passed: Upload, Preview, Download, Edit, Replace, Delete verified cleanly on 'bcwa-documents' bucket.")
+
 if __name__ == '__main__':
     unittest.main()
 

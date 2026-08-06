@@ -13,14 +13,14 @@ from database import (
     init_db, get_dashboard_stats, get_medical_stores, get_medical_store,
     save_medical_store, delete_medical_store, get_pharmacists, save_pharmacist,
     transfer_pharmacist, delete_pharmacist, get_documents, save_document,
-    delete_document, get_renewal_calendar_events, get_notifications,
+    delete_document, update_document_metadata, replace_document_file, get_renewal_calendar_events, get_notifications,
     mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates,
     log_activity, get_notification_logs, get_notification_log_by_id, resend_notification_log,
     get_notification_queue, get_notification_queue_item_by_id,
     verify_admin_credentials, change_user_password, change_store_password
 )
 from seed_data import generate_seed_data
-from supabase_client import upload_to_supabase_storage, test_supabase_connection, db_table
+from supabase_client import upload_to_supabase_storage, test_supabase_connection, db_table, generate_document_preview_url, DEFAULT_STORAGE_BUCKET
 from notification_engine import (
     run_reminder_engine,
     scan_and_queue_expiring_reminders,
@@ -771,6 +771,54 @@ def api_get_document_versions(doc_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/documents/<doc_id>/preview', methods=['GET'])
+def api_preview_document(doc_id):
+    user = session.get('user')
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        doc_res = db_table('documents').select('*').eq('id', doc_id).execute()
+        if not doc_res.data:
+            return jsonify({'error': 'Document not found'}), 404
+
+        target_doc = doc_res.data[0]
+        store_id = target_doc.get('store_id')
+
+        if user.get('role') == 'Store' and user.get('store_id') != store_id:
+            return jsonify({'error': 'Forbidden access to store documents'}), 403
+
+        storage_path = target_doc.get('storage_path')
+        firm_id = target_doc.get('firm_id') or 'BCWA-MED-000001'
+        category = target_doc.get('category') or 'Other Documents'
+        file_name = target_doc.get('file_name') or 'document.pdf'
+        bucket_name = DEFAULT_STORAGE_BUCKET
+
+        if not storage_path:
+            storage_path = f"{firm_id}/{category}/{file_name}"
+
+        preview_url = generate_document_preview_url(storage_path, bucket_name=bucket_name)
+
+        logging.info(f"[DOCUMENT PREVIEW REQUESTED]\n"
+                     f"  • Document ID: {doc_id}\n"
+                     f"  • Bucket Name: {bucket_name}\n"
+                     f"  • File Path: {storage_path}\n"
+                     f"  • Preview URL: {preview_url}")
+
+        if request.args.get('redirect', 'true').lower() == 'true':
+            return redirect(preview_url)
+
+        return jsonify({
+            'success': True,
+            'document_id': doc_id,
+            'bucket_name': bucket_name,
+            'file_path': storage_path,
+            'preview_url': preview_url
+        })
+    except Exception as e:
+        logging.error(f"[PREVIEW ERROR] Failed to generate preview for doc {doc_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/documents/<doc_id>/download', methods=['GET'])
 def api_download_document(doc_id):
     user = session.get('user')
@@ -797,10 +845,41 @@ def api_download_document(doc_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/documents/<doc_id>', methods=['PUT', 'POST'])
+@login_required
+def api_edit_document(doc_id):
+    user = session.get('user', {})
+    user_name = user.get('name', 'Administrator')
+
+    file = request.files.get('file')
+    if file:
+        file_ok, file_err = validate_uploaded_file(file)
+        if not file_ok:
+            return jsonify({'success': False, 'error': file_err}), 400
+        res_id = replace_document_file(doc_id, file, file.filename, user_name=user_name)
+        if not res_id:
+            return jsonify({'success': False, 'error': 'Failed replacing document file'}), 500
+        return jsonify({'success': True, 'id': res_id, 'message': 'Document file replaced successfully'})
+
+    update_data = {}
+    if 'title' in request.form: update_data['title'] = sanitize_string(request.form.get('title'), 200)
+    if 'category' in request.form: update_data['category'] = sanitize_string(request.form.get('category'), 100)
+    if 'document_number' in request.form: update_data['document_number'] = sanitize_string(request.form.get('document_number'), 100)
+    if 'expiry_date' in request.form: update_data['expiry_date'] = request.form.get('expiry_date')
+    if 'issue_date' in request.form: update_data['issue_date'] = request.form.get('issue_date')
+    if 'remarks' in request.form: update_data['remarks'] = sanitize_string(request.form.get('remarks'), 500)
+
+    res_id = update_document_metadata(doc_id, update_data, user_name=user_name)
+    if not res_id:
+        return jsonify({'success': False, 'error': 'Failed updating document metadata'}), 500
+    return jsonify({'success': True, 'id': res_id, 'message': 'Document metadata updated successfully'})
+
 @app.route('/api/documents/<doc_id>', methods=['DELETE'])
-@admin_required
+@login_required
 def api_delete_document(doc_id):
-    success = delete_document(doc_id)
+    user = session.get('user', {})
+    user_name = user.get('name', 'Administrator')
+    success = delete_document(doc_id, user_name=user_name)
     return jsonify({'success': success})
 
 @app.route('/api/calendar/events', methods=['GET'])

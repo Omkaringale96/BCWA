@@ -372,7 +372,7 @@ const BCWAApp = {
                         <div class="text-secondary" style="font-size:12px;">Expiry Date: <strong>${d.expiry_date || 'N/A'}</strong></div>
                     </div>
                     <div class="d-flex gap-2 mt-3 pt-2" style="border-top:1px solid #F1F5F9;">
-                        <a href="${d.file_url}" target="_blank" class="action-btn btn-action-preview" style="width:48%;"><i data-lucide="eye"></i> Preview</a>
+                        <a href="/api/documents/${d.id}/preview" target="_blank" class="action-btn btn-action-preview" style="width:48%;"><i data-lucide="eye"></i> Preview</a>
                         <a href="/api/store/documents/${d.id}/download" class="action-btn btn-action-download" style="width:48%;"><i data-lucide="download"></i> Download PDF</a>
                     </div>
                 </div>
@@ -791,8 +791,9 @@ const BCWAApp = {
                     <td>${doc.expiry_date || 'N/A'}</td>
                     <td>
                         <div style="display:flex; gap:8px; align-items:center;">
-                            <a href="${doc.file_url}" target="_blank" class="action-btn btn-action-preview"><i data-lucide="eye"></i> Preview</a>
+                            <a href="/api/documents/${doc.id}/preview" target="_blank" class="action-btn btn-action-preview"><i data-lucide="eye"></i> Preview</a>
                             <button class="action-btn btn-action-resend" onclick="BCWAApp.viewDocumentVersions('${doc.id}')"><i data-lucide="history"></i> v${doc.version || 1} Details</button>
+                            <button class="action-btn btn-action-delete" onclick="BCWAApp.deleteDocument('${doc.id}')" title="Delete Document"><i data-lucide="trash-2"></i> Delete</button>
                         </div>
                     </td>
                 </tr>
@@ -805,6 +806,25 @@ const BCWAApp = {
             lucide.createIcons();
         } catch (err) {
             console.error('Error loading document vault:', err);
+        }
+    },
+
+    async deleteDocument(docId) {
+        if (!confirm('Are you sure you want to delete this document? This will remove the file from Supabase Storage permanently.')) {
+            return;
+        }
+        try {
+            const res = await fetch(`/api/documents/${docId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                this.loadDocumentVault();
+                this.loadDashboardStats();
+            } else {
+                alert(data.error || 'Failed to delete document.');
+            }
+        } catch (e) {
+            console.error('Delete document error:', e);
+            alert('An error occurred while deleting document.');
         }
     },
 
@@ -843,8 +863,11 @@ const BCWAApp = {
                             </span>
                         </td>
                         <td>
-                            <a href="${v.file_url}" target="_blank" class="action-btn btn-action-download">
-                                <i data-lucide="download"></i> Download PDF
+                            <a href="/api/documents/${v.id}/preview" target="_blank" class="action-btn btn-action-preview">
+                                <i data-lucide="eye"></i> Preview
+                            </a>
+                            <a href="/api/documents/${v.id}/download" class="action-btn btn-action-download">
+                                <i data-lucide="download"></i> Download
                             </a>
                         </td>
                     </tr>
