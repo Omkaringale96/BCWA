@@ -1,6 +1,7 @@
 import unittest
 import json
 import os
+os.environ['TESTING'] = 'true'
 from app import app
 from database import get_db_connection, get_dashboard_stats, get_medical_stores, get_pharmacists
 

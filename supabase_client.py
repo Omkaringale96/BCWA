@@ -119,6 +119,9 @@ def test_supabase_connection():
         logging.error(traceback.format_exc())
         return False, err_msg
 
+def is_testing_environment():
+    return os.environ.get('TESTING') == 'true' or os.environ.get('FLASK_ENV') == 'testing'
+
 class SupabaseTableProxy:
     def __init__(self, table_name):
         self.table_name = table_name
@@ -135,6 +138,9 @@ class SupabaseTableProxy:
     def update(self, data):
         return SupabaseUpdateBuilder(self.table_name, data)
 
+    def delete(self):
+        return SupabaseDeleteBuilder(self.table_name)
+
 class SupabaseInsertBuilder:
     def __init__(self, table_name, data):
         self.table_name = table_name
@@ -149,21 +155,23 @@ class SupabaseInsertBuilder:
                 logging.info(f"[SUPABASE INSERT SUCCESS] Table '{self.table_name}' | Data: {res.data}")
                 return SupabaseResponse(res.data)
             except Exception as e:
-                err_str = str(e)
-                if 'PGRST205' in err_str or 'Could not find the table' in err_str:
-                    logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
-                else:
-                    err_msg = f"[SUPABASE INSERT FAILURE] Table '{self.table_name}' | Error: {e}"
-                    print(err_msg)
-                    print(traceback.format_exc())
-                    logging.error(err_msg)
-                    logging.error(traceback.format_exc())
-                    raise e
+                err_msg = f"[SUPABASE INSERT FAILURE] Table '{self.table_name}' | Error: {e}"
+                print(err_msg)
+                print(traceback.format_exc())
+                logging.error(err_msg)
+                logging.error(traceback.format_exc())
+                if not is_testing_environment():
+                    raise RuntimeError(err_msg) from e
 
-        rows = _mock_storage.setdefault(self.table_name, [])
-        items = self.data if isinstance(self.data, list) else [self.data]
-        rows.extend(items)
-        return SupabaseResponse(items)
+        if is_testing_environment():
+            rows = _mock_storage.setdefault(self.table_name, [])
+            items = self.data if isinstance(self.data, list) else [self.data]
+            rows.extend(items)
+            return SupabaseResponse(items)
+
+        err_msg = f"Database operation failed: Supabase client is disconnected. Verify SUPABASE_URL and SUPABASE_SERVICE_KEY on Render."
+        logging.error(err_msg)
+        raise RuntimeError(err_msg)
 
 class SupabaseUpsertBuilder:
     def __init__(self, table_name, data):
@@ -179,27 +187,29 @@ class SupabaseUpsertBuilder:
                 logging.info(f"[SUPABASE UPSERT SUCCESS] Table '{self.table_name}' | Data: {res.data}")
                 return SupabaseResponse(res.data)
             except Exception as e:
-                err_str = str(e)
-                if 'PGRST205' in err_str or 'Could not find the table' in err_str:
-                    logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
-                else:
-                    err_msg = f"[SUPABASE UPSERT FAILURE] Table '{self.table_name}' | Error: {e}"
-                    print(err_msg)
-                    print(traceback.format_exc())
-                    logging.error(err_msg)
-                    logging.error(traceback.format_exc())
-                    raise e
+                err_msg = f"[SUPABASE UPSERT FAILURE] Table '{self.table_name}' | Error: {e}"
+                print(err_msg)
+                print(traceback.format_exc())
+                logging.error(err_msg)
+                logging.error(traceback.format_exc())
+                if not is_testing_environment():
+                    raise RuntimeError(err_msg) from e
 
-        rows = _mock_storage.setdefault(self.table_name, [])
-        items = self.data if isinstance(self.data, list) else [self.data]
-        for item in items:
-            item_id = item.get('id') or item.get('key')
-            existing = [i for i in rows if (i.get('id') and i.get('id') == item_id) or (i.get('key') and i.get('key') == item_id)]
-            if existing:
-                existing[0].update(item)
-            else:
-                rows.append(item)
-        return SupabaseResponse(items)
+        if is_testing_environment():
+            rows = _mock_storage.setdefault(self.table_name, [])
+            items = self.data if isinstance(self.data, list) else [self.data]
+            for item in items:
+                item_id = item.get('id') or item.get('key')
+                existing = [i for i in rows if (i.get('id') and i.get('id') == item_id) or (i.get('key') and i.get('key') == item_id)]
+                if existing:
+                    existing[0].update(item)
+                else:
+                    rows.append(item)
+            return SupabaseResponse(items)
+
+        err_msg = f"Database operation failed: Supabase client is disconnected. Verify SUPABASE_URL and SUPABASE_SERVICE_KEY on Render."
+        logging.error(err_msg)
+        raise RuntimeError(err_msg)
 
 class SupabaseQueryBuilder:
     def __init__(self, table_name, columns):
@@ -262,32 +272,40 @@ class SupabaseQueryBuilder:
                 res = q.execute()
                 return SupabaseResponse(res.data)
             except Exception as e:
-                logging.error(f"Supabase select error in {self.table_name}: {e}")
+                err_msg = f"Supabase select error in '{self.table_name}': {e}"
+                logging.error(err_msg)
                 logging.error(traceback.format_exc())
+                if not is_testing_environment():
+                    raise RuntimeError(err_msg) from e
 
-        rows = _mock_storage.get(self.table_name, [])
-        filtered = []
-        for r in rows:
-            match = True
-            for op, col, val in self.filters:
-                r_val = r.get(col)
-                if op == 'eq' and str(r_val or '').lower() != str(val or '').lower(): match = False
-                elif op == 'neq' and str(r_val or '').lower() == str(val or '').lower(): match = False
-                elif op == 'lte' and str(r_val or '') > str(val or ''): match = False
-                elif op == 'gte' and str(r_val or '') < str(val or ''): match = False
-                elif op == 'lt' and str(r_val or '') >= str(val or ''): match = False
-                elif op == 'in' and (r_val not in val and str(r_val) not in val): match = False
-            if match:
-                filtered.append(r)
+        if is_testing_environment():
+            rows = _mock_storage.get(self.table_name, [])
+            filtered = []
+            for r in rows:
+                match = True
+                for op, col, val in self.filters:
+                    r_val = r.get(col)
+                    if op == 'eq' and str(r_val or '').lower() != str(val or '').lower(): match = False
+                    elif op == 'neq' and str(r_val or '').lower() == str(val or '').lower(): match = False
+                    elif op == 'lte' and str(r_val or '') > str(val or ''): match = False
+                    elif op == 'gte' and str(r_val or '') < str(val or ''): match = False
+                    elif op == 'lt' and str(r_val or '') >= str(val or ''): match = False
+                    elif op == 'in' and (r_val not in val and str(r_val) not in val): match = False
+                if match:
+                    filtered.append(r)
 
-        if self.order_by:
-            col, desc = self.order_by
-            filtered.sort(key=lambda x: str(x.get(col, '')), reverse=desc)
+            if self.order_by:
+                col, desc = self.order_by
+                filtered.sort(key=lambda x: str(x.get(col, '')), reverse=desc)
 
-        if self.limit_val:
-            filtered = filtered[:self.limit_val]
+            if self.limit_val:
+                filtered = filtered[:self.limit_val]
 
-        return SupabaseResponse(filtered)
+            return SupabaseResponse(filtered)
+
+        err_msg = f"Database operation failed: Supabase client is disconnected. Verify SUPABASE_URL and SUPABASE_SERVICE_KEY on Render."
+        logging.error(err_msg)
+        raise RuntimeError(err_msg)
 
 class SupabaseUpdateBuilder:
     def __init__(self, table_name, data):
@@ -311,27 +329,29 @@ class SupabaseUpdateBuilder:
                 logging.info(f"[SUPABASE UPDATE SUCCESS] Table '{self.table_name}' | Data: {res.data}")
                 return SupabaseResponse(res.data)
             except Exception as e:
-                err_str = str(e)
-                if 'PGRST205' in err_str or 'Could not find the table' in err_str:
-                    logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
-                else:
-                    err_msg = f"[SUPABASE UPDATE FAILURE] Table '{self.table_name}' | Error: {e}"
-                    print(err_msg)
-                    print(traceback.format_exc())
-                    logging.error(err_msg)
-                    logging.error(traceback.format_exc())
-                    raise e
+                err_msg = f"[SUPABASE UPDATE FAILURE] Table '{self.table_name}' | Error: {e}"
+                print(err_msg)
+                print(traceback.format_exc())
+                logging.error(err_msg)
+                logging.error(traceback.format_exc())
+                if not is_testing_environment():
+                    raise RuntimeError(err_msg) from e
 
-        rows = _mock_storage.get(self.table_name, [])
-        updated = []
-        for r in rows:
-            match = True
-            for op, col, val in self.filters:
-                if op == 'eq' and str(r.get(col) or '').lower() != str(val or '').lower(): match = False
-            if match:
-                r.update(self.data)
-                updated.append(r)
-        return SupabaseResponse(updated)
+        if is_testing_environment():
+            rows = _mock_storage.get(self.table_name, [])
+            updated = []
+            for r in rows:
+                match = True
+                for op, col, val in self.filters:
+                    if op == 'eq' and str(r.get(col) or '').lower() != str(val or '').lower(): match = False
+                if match:
+                    r.update(self.data)
+                    updated.append(r)
+            return SupabaseResponse(updated)
+
+        err_msg = f"Database operation failed: Supabase client is disconnected. Verify SUPABASE_URL and SUPABASE_SERVICE_KEY on Render."
+        logging.error(err_msg)
+        raise RuntimeError(err_msg)
 
 class SupabaseDeleteBuilder:
     def __init__(self, table_name):
@@ -352,26 +372,30 @@ class SupabaseDeleteBuilder:
                 res = q.execute()
                 return SupabaseResponse(res.data)
             except Exception as e:
-                err_str = str(e)
-                if 'PGRST205' in err_str or 'Could not find the table' in err_str:
-                    logging.warning(f"[SUPABASE NOTICE] Table '{self.table_name}' missing from Supabase schema. Operating in local store mode.")
-                else:
-                    logging.error(f"Supabase delete error in {self.table_name}: {e}")
-                    logging.error(traceback.format_exc())
+                err_msg = f"[SUPABASE DELETE FAILURE] Table '{self.table_name}' | Error: {e}"
+                logging.error(err_msg)
+                logging.error(traceback.format_exc())
+                if not is_testing_environment():
+                    raise RuntimeError(err_msg) from e
 
-        rows = _mock_storage.get(self.table_name, [])
-        new_rows = []
-        deleted = []
-        for r in rows:
-            match = True
-            for op, col, val in self.filters:
-                if op == 'eq' and str(r.get(col) or '').lower() != str(val or '').lower(): match = False
-            if match:
-                deleted.append(r)
-            else:
-                new_rows.append(r)
-        _mock_storage[self.table_name] = new_rows
-        return SupabaseResponse(deleted)
+        if is_testing_environment():
+            rows = _mock_storage.get(self.table_name, [])
+            new_rows = []
+            deleted = []
+            for r in rows:
+                match = True
+                for op, col, val in self.filters:
+                    if op == 'eq' and str(r.get(col) or '').lower() != str(val or '').lower(): match = False
+                if match:
+                    deleted.append(r)
+                else:
+                    new_rows.append(r)
+            _mock_storage[self.table_name] = new_rows
+            return SupabaseResponse(deleted)
+
+        err_msg = f"Database operation failed: Supabase client is disconnected. Verify SUPABASE_URL and SUPABASE_SERVICE_KEY on Render."
+        logging.error(err_msg)
+        raise RuntimeError(err_msg)
 
 class SupabaseResponse:
     def __init__(self, data):

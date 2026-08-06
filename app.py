@@ -136,7 +136,7 @@ import uuid
 SERVER_STARTUP_ID = uuid.uuid4().hex
 
 init_db()
-generate_seed_data()
+test_supabase_connection()
 start_background_notification_scheduler()
 start_keep_alive_engine()
 
