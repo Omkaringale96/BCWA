@@ -5,6 +5,8 @@ import io
 import re
 import json
 import random
+import logging
+from functools import wraps
 from datetime import datetime, timedelta
 from config import get_config
 from database import (
@@ -14,7 +16,8 @@ from database import (
     delete_document, get_renewal_calendar_events, get_notifications,
     mark_notification_read, get_activity_logs, get_users, save_user, check_duplicates,
     log_activity, get_notification_logs, get_notification_log_by_id, resend_notification_log,
-    get_notification_queue, get_notification_queue_item_by_id
+    get_notification_queue, get_notification_queue_item_by_id,
+    verify_admin_credentials, change_user_password, change_store_password
 )
 from seed_data import generate_seed_data
 from supabase_client import upload_to_supabase_storage, test_supabase_connection, db_table
@@ -32,6 +35,55 @@ from email_service import verify_smtp
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config.from_object(get_config())
 CORS(app, supports_credentials=True)
+
+# ---------------------------------------------------------------------------
+# RATE LIMITING
+# ---------------------------------------------------------------------------
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["200 per minute"],
+        storage_uri="memory://"
+    )
+except ImportError:
+    # Graceful fallback if Flask-Limiter is not installed
+    limiter = None
+
+# ---------------------------------------------------------------------------
+# FILE UPLOAD SECURITY CONSTANTS
+# ---------------------------------------------------------------------------
+ALLOWED_FILE_EXTENSIONS = {'.pdf', '.jpg', '.jpeg', '.png', '.webp', '.gif', '.doc', '.docx', '.xls', '.xlsx'}
+MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+def validate_uploaded_file(file_obj):
+    """Validate uploaded file type and size. Returns (ok, error_message)."""
+    if not file_obj or not file_obj.filename:
+        return True, None  # No file is OK for optional uploads
+    filename = file_obj.filename.lower()
+    ext = os.path.splitext(filename)[1]
+    if ext not in ALLOWED_FILE_EXTENSIONS:
+        accepted = ", ".join(sorted(ALLOWED_FILE_EXTENSIONS))
+        return False, f'File type "{ext}" is not allowed. Accepted: {accepted}'
+    # Check file size by reading content length
+    file_obj.seek(0, os.SEEK_END)
+    file_size = file_obj.tell()
+    file_obj.seek(0)
+    if file_size > MAX_FILE_SIZE_BYTES:
+        return False, f'File size ({file_size // (1024*1024)} MB) exceeds maximum allowed size (10 MB)'
+    return True, None
+
+def sanitize_string(value, max_length=500):
+    """Sanitize a string input: strip, limit length, remove dangerous characters."""
+    if not value or not isinstance(value, str):
+        return value
+    value = value.strip()[:max_length]
+    # Remove potential script injection
+    value = re.sub(r'<script[^>]*>.*?</script>', '', value, flags=re.IGNORECASE | re.DOTALL)
+    value = re.sub(r'javascript:', '', value, flags=re.IGNORECASE)
+    return value
 
 import gzip
 
@@ -125,6 +177,32 @@ def is_session_valid():
         return False
     return True
 
+# ---------------------------------------------------------------------------
+# AUTHORIZATION DECORATORS
+# ---------------------------------------------------------------------------
+def login_required(f):
+    """Decorator: Requires a valid session (any authenticated user)."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not is_session_valid():
+            return jsonify({'error': 'Authentication required. Please log in.'}), 401
+        session['last_activity'] = datetime.now().isoformat()
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    """Decorator: Requires a valid Administrator session."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not is_session_valid():
+            return jsonify({'error': 'Authentication required. Please log in.'}), 401
+        user = session.get('user', {})
+        if user.get('role') not in ('Administrator', 'Super Admin'):
+            return jsonify({'error': 'Administrator access required'}), 403
+        session['last_activity'] = datetime.now().isoformat()
+        return f(*args, **kwargs)
+    return decorated_function
+
 # -----------------------------------------------------------------------------
 # EXTRA SECURITY HEADERS & NO-CACHE
 # -----------------------------------------------------------------------------
@@ -163,39 +241,18 @@ def api_login():
     ip = get_client_ip()
     is_locked, remaining_secs = check_ip_lockout(ip)
     if is_locked:
-        audit_security_log("Failed Login Blocked", f"Lockout active ({remaining_secs}s remaining)", username if 'username' in locals() else "Unknown")
+        audit_security_log("Failed Login Blocked", f"Lockout active ({remaining_secs}s remaining)", user_name="Unknown")
         return jsonify({'success': False, 'error': 'Too many failed attempts. Try again later.'}), 429
 
     data = request.json or {}
-    username = (data.get('username') or data.get('officer_id') or '').strip()
+    username = sanitize_string((data.get('username') or data.get('officer_id') or '').strip(), 100)
     password = (data.get('password') or '').strip()
 
     if not username or not password:
         return jsonify({'success': False, 'error': 'Officer ID / Email and Password required'}), 400
 
-    user_found = None
-
-    # Instant Administrator credentials check for Vinayak (VIN2821 / 2821)
-    if (username.upper() == 'VIN2821' or username.lower() == 'vin2821@bcwaportal.in' or username.lower() == 'vinayak') and password == '2821':
-        user_found = {
-            'id': 'VIN2821',
-            'officer_id': 'VIN2821',
-            'name': 'Vinayak',
-            'email': 'vin2821@bcwaportal.in',
-            'role': 'Administrator',
-            'status': 'Active'
-        }
-    else:
-        try:
-            res = db_table('users').select('*').eq('id', username).execute()
-            if not res.data:
-                res = db_table('users').select('*').eq('email', username).execute()
-            if res.data:
-                u = res.data[0]
-                if u.get('password') == password and u.get('status') == 'Active':
-                    user_found = u
-        except Exception:
-            pass
+    # Authenticate using hashed password verification (no hardcoded credentials)
+    user_found = verify_admin_credentials(username, password)
 
     if user_found:
         reset_login_lockout(ip)
@@ -312,7 +369,7 @@ def api_check_session():
             try:
                 last_act = datetime.fromisoformat(last_act_str)
                 user_role = session.get('user', {}).get('role')
-                max_inactivity = 900 if user_role == 'Store' else 60 # 15 min for Store, 60s for Admin
+                max_inactivity = 900  # 15 min for both Admin and Store users
                 if (datetime.now() - last_act).total_seconds() > max_inactivity:
                     user_name = session.get('user', {}).get('name', 'User')
                     audit_security_log("Session Timeout", f"Server-side session expired due to inactivity for '{user_name}'.", user_name=user_name)
@@ -325,6 +382,36 @@ def api_check_session():
         return jsonify({'authenticated': True, 'user': session['user']})
     
     return jsonify({'authenticated': False}), 401
+
+# ---------------------------------------------------------------------------
+# CHANGE PASSWORD APIs
+# ---------------------------------------------------------------------------
+@app.route('/api/auth/change-password', methods=['POST'])
+@login_required
+def api_change_password():
+    user = session.get('user', {})
+    data = request.json or {}
+    old_password = (data.get('old_password') or '').strip()
+    new_password = (data.get('new_password') or '').strip()
+    confirm_password = (data.get('confirm_password') or '').strip()
+
+    if not old_password or not new_password:
+        return jsonify({'success': False, 'error': 'Current password and new password are required'}), 400
+    if new_password != confirm_password:
+        return jsonify({'success': False, 'error': 'New password and confirmation do not match'}), 400
+
+    user_role = user.get('role')
+    if user_role == 'Store':
+        firm_id = user.get('firm_id')
+        ok, msg = change_store_password(firm_id, old_password, new_password)
+    else:
+        user_id = user.get('id')
+        ok, msg = change_user_password(user_id, old_password, new_password)
+
+    if ok:
+        audit_security_log("Password Changed", f"User '{user.get('name')}' changed their password.", user_name=user.get('name'))
+        return jsonify({'success': True, 'message': msg})
+    return jsonify({'success': False, 'error': msg}), 400
 
 @app.route('/api/ocr/extract', methods=['POST'])
 def ocr_extract():
@@ -408,17 +495,19 @@ def api_check_duplicates():
     return jsonify({'has_duplicates': len(dups) > 0, 'warnings': dups})
 
 @app.route('/api/dashboard/stats', methods=['GET'])
+@login_required
 def api_dashboard_stats():
     stats = get_dashboard_stats()
     return jsonify(stats)
 
 @app.route('/api/stores', methods=['GET'])
+@login_required
 def api_get_stores():
-    query = request.args.get('query')
-    compliance = request.args.get('compliance')
-    status = request.args.get('status')
+    query = sanitize_string(request.args.get('query'), 200)
+    compliance = sanitize_string(request.args.get('compliance'), 50)
+    status = sanitize_string(request.args.get('status'), 50)
     page = request.args.get('page', type=int)
-    limit = int(request.args.get('limit', 25))
+    limit = min(int(request.args.get('limit', 25)), 100)  # Cap at 100
 
     res = get_medical_stores(query=query, compliance=compliance, status=status, page=page, limit=limit)
     if isinstance(res, dict):
@@ -426,7 +515,9 @@ def api_get_stores():
     return jsonify({'stores': res, 'total': len(res)})
 
 @app.route('/api/stores/<store_id>', methods=['GET'])
+@login_required
 def api_get_store(store_id):
+    store_id = sanitize_string(store_id, 50)
     store = get_medical_store(store_id)
     if not store:
         return jsonify({'error': 'Medical Store not found'}), 404
@@ -434,25 +525,28 @@ def api_get_store(store_id):
 
 @app.route('/api/stores', methods=['POST'])
 @app.route('/api/stores/<store_id>', methods=['PUT'])
+@admin_required
 def api_save_store(store_id=None):
     data = request.json or {}
     if store_id:
-        data['id'] = store_id
+        data['id'] = sanitize_string(store_id, 50)
 
     res = save_medical_store(data)
     return jsonify({'success': True, 'id': res['id'], 'shop_code': res['shop_code'], 'warnings': res['warnings']})
 
 @app.route('/api/stores/<store_id>', methods=['DELETE'])
+@admin_required
 def api_delete_store(store_id):
     success = delete_medical_store(store_id)
     return jsonify({'success': success})
 
 @app.route('/api/pharmacists', methods=['GET'])
+@login_required
 def api_get_pharmacists():
-    query = request.args.get('query')
-    store_id = request.args.get('store_id')
+    query = sanitize_string(request.args.get('query'), 200)
+    store_id = sanitize_string(request.args.get('store_id'), 50)
     page = request.args.get('page', type=int)
-    limit = int(request.args.get('limit', 25))
+    limit = min(int(request.args.get('limit', 25)), 100)
     res = get_pharmacists(query=query, store_id=store_id, page=page, limit=limit)
     if isinstance(res, dict):
         return jsonify(res)
@@ -460,6 +554,7 @@ def api_get_pharmacists():
 
 @app.route('/api/pharmacists', methods=['POST'])
 @app.route('/api/pharmacists/<ph_id>', methods=['PUT'])
+@admin_required
 def api_save_pharmacist(ph_id=None):
     data = request.json or {}
     if ph_id:
@@ -469,6 +564,7 @@ def api_save_pharmacist(ph_id=None):
     return jsonify({'success': True, 'id': res['id'], 'warnings': res['warnings']})
 
 @app.route('/api/pharmacists/<ph_id>/transfer', methods=['POST'])
+@admin_required
 def api_transfer_pharmacist(ph_id):
     data = request.json or {}
     new_store_id = data.get('new_store_id')
@@ -480,31 +576,39 @@ def api_transfer_pharmacist(ph_id):
     return jsonify({'success': success})
 
 @app.route('/api/pharmacists/<ph_id>', methods=['DELETE'])
+@admin_required
 def api_delete_pharmacist(ph_id):
     success = delete_pharmacist(ph_id)
     return jsonify({'success': success})
 
 @app.route('/api/documents', methods=['GET'])
+@login_required
 def api_get_documents():
-    store_id = request.args.get('store_id')
-    category = request.args.get('category')
-    query = request.args.get('query')
+    store_id = sanitize_string(request.args.get('store_id'), 50)
+    category = sanitize_string(request.args.get('category'), 100)
+    query = sanitize_string(request.args.get('query'), 200)
     page = request.args.get('page', type=int)
-    limit = int(request.args.get('limit', 25))
+    limit = min(int(request.args.get('limit', 25)), 100)
     res = get_documents(store_id=store_id, category=category, query=query, page=page, limit=limit)
     if isinstance(res, dict):
         return jsonify(res)
     return jsonify({'documents': res})
 
 @app.route('/api/documents/upload', methods=['POST'])
+@login_required
 def api_upload_document():
-    store_id = request.form.get('store_id')
-    category = request.form.get('category', 'Other Documents')
-    title = request.form.get('title', 'Document')
+    store_id = sanitize_string(request.form.get('store_id'), 50)
+    category = sanitize_string(request.form.get('category', 'Other Documents'), 100)
+    title = sanitize_string(request.form.get('title', 'Document'), 200)
     issue_date = request.form.get('issue_date')
     expiry_date = request.form.get('expiry_date')
-    doc_number = request.form.get('document_number', 'N/A')
+    doc_number = sanitize_string(request.form.get('document_number', 'N/A'), 100)
     file = request.files.get('file')
+
+    # Validate uploaded file type and size
+    file_ok, file_err = validate_uploaded_file(file)
+    if not file_ok:
+        return jsonify({'success': False, 'error': file_err}), 400
 
     store = get_medical_store(store_id) if store_id else None
     firm_id = store.get('firm_id', 'BCWA-MED-000001') if store else 'BCWA-MED-000001'
@@ -632,16 +736,19 @@ def api_download_document(doc_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/documents/<doc_id>', methods=['DELETE'])
+@admin_required
 def api_delete_document(doc_id):
     success = delete_document(doc_id)
     return jsonify({'success': success})
 
 @app.route('/api/calendar/events', methods=['GET'])
+@login_required
 def api_calendar_events():
     events = get_renewal_calendar_events()
     return jsonify({'events': events})
 
 @app.route('/api/notifications', methods=['GET'])
+@login_required
 def api_notifications():
     notifs = get_notifications()
     return jsonify({'notifications': notifs})
@@ -652,15 +759,17 @@ def api_mark_notif_read(notif_id):
     return jsonify({'success': success})
 
 @app.route('/api/activity-logs', methods=['GET'])
+@admin_required
 def api_activity_logs():
     page = request.args.get('page', type=int)
-    limit = int(request.args.get('limit', 25))
+    limit = min(int(request.args.get('limit', 25)), 100)
     res = get_activity_logs(page=page, limit=limit)
     if isinstance(res, dict):
         return jsonify(res)
     return jsonify({'logs': res})
 
 @app.route('/api/admin/users', methods=['GET', 'POST'])
+@admin_required
 def api_admin_users():
     if request.method == 'POST':
         data = request.json or {}
@@ -830,14 +939,16 @@ def generate_report():
 # AUTOMATED RENEWAL NOTIFICATION ENGINE API & MANUAL ACTIONS
 # -----------------------------------------------------------------------------
 @app.route('/api/notifications/engine/run', methods=['POST'])
+@admin_required
 def api_run_notification_engine():
     summary = run_reminder_engine()
     return jsonify({'success': True, 'summary': summary})
 
 @app.route('/api/notifications/queue', methods=['GET'])
+@admin_required
 def api_get_notification_queue():
     status = request.args.get('status')
-    limit = int(request.args.get('limit', 100))
+    limit = min(int(request.args.get('limit', 100)), 500)
     queue_items = get_notification_queue(status=status, limit=limit)
     return jsonify({'queue': queue_items, 'total': len(queue_items)})
 
@@ -862,8 +973,9 @@ def api_admin_verify_smtp():
     return jsonify({'success': ok, 'message': msg})
 
 @app.route('/api/notifications/logs', methods=['GET'])
+@admin_required
 def api_get_notification_logs():
-    limit = int(request.args.get('limit', 100))
+    limit = min(int(request.args.get('limit', 100)), 500)
     logs = get_notification_logs(limit=limit)
     return jsonify({'logs': logs, 'total': len(logs)})
 

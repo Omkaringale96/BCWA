@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const BCWAApp = {
     inactivityTimer: null,
-    INACTIVITY_TIMEOUT_MS: 60000, // 60 seconds inactivity auto-logout
+    INACTIVITY_TIMEOUT_MS: 900000, // 15 minutes (900 seconds) inactivity auto-logout
 
     init() {
         this.bindAuth();
@@ -458,6 +458,60 @@ const BCWAApp = {
             }
         } catch (e) {
             alert('Failed submitting password reset request.');
+        }
+    },
+
+    async submitChangePassword() {
+        const oldPw = document.getElementById('cp-old-password').value.trim();
+        const newPw = document.getElementById('cp-new-password').value.trim();
+        const confirmPw = document.getElementById('cp-confirm-password').value.trim();
+        const errEl = document.getElementById('cp-error-msg');
+        const successEl = document.getElementById('cp-success-msg');
+
+        errEl.style.display = 'none';
+        successEl.style.display = 'none';
+
+        if (!oldPw || !newPw || !confirmPw) {
+            errEl.textContent = 'All fields are required.';
+            errEl.style.display = 'block';
+            return;
+        }
+        if (newPw.length < 4) {
+            errEl.textContent = 'New password must be at least 4 characters.';
+            errEl.style.display = 'block';
+            return;
+        }
+        if (newPw !== confirmPw) {
+            errEl.textContent = 'New password and confirmation do not match.';
+            errEl.style.display = 'block';
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    old_password: oldPw,
+                    new_password: newPw,
+                    confirm_password: confirmPw
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                successEl.textContent = '✅ ' + data.message;
+                successEl.style.display = 'block';
+                document.getElementById('cp-old-password').value = '';
+                document.getElementById('cp-new-password').value = '';
+                document.getElementById('cp-confirm-password').value = '';
+                setTimeout(() => closeModal('modal-change-password'), 2000);
+            } else {
+                errEl.textContent = data.error || 'Failed to change password.';
+                errEl.style.display = 'block';
+            }
+        } catch (e) {
+            errEl.textContent = 'Server error. Please try again.';
+            errEl.style.display = 'block';
         }
     },
 

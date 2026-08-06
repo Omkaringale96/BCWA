@@ -8,8 +8,26 @@ class BCWAPortalTestCase(unittest.TestCase):
     def setUp(self):
         self.app = app.test_client()
         self.app.testing = True
+        from app import reset_login_lockout
+        reset_login_lockout('127.0.0.1')
+
+    def login_admin(self):
+        return self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
+
+    def test_00_unauthorized_access_blocked(self):
+        """Verify that protected API endpoints return 401 when accessed without logging in."""
+        res1 = self.app.get('/api/dashboard/stats')
+        self.assertEqual(res1.status_code, 401)
+        res2 = self.app.get('/api/stores')
+        self.assertEqual(res2.status_code, 401)
+        res3 = self.app.get('/api/pharmacists')
+        self.assertEqual(res3.status_code, 401)
+        res4 = self.app.get('/api/calendar/events')
+        self.assertEqual(res4.status_code, 401)
+        print("Unauthorized Access Guard Test Passed: Unauthenticated requests correctly return 401.")
 
     def test_01_dashboard_stats(self):
+        self.login_admin()
         response = self.app.get('/api/dashboard/stats')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
@@ -20,6 +38,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         print(f"Dashboard Stats Test Passed: {data['total_stores']} stores, {data['total_pharmacists']} pharmacists.")
 
     def test_02_medical_stores_list(self):
+        self.login_admin()
         response = self.app.get('/api/stores')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
@@ -28,6 +47,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         print(f"Medical Stores List Test Passed: {len(data['stores'])} stores loaded.")
 
     def test_03_medical_store_detail(self):
+        self.login_admin()
         stores = get_medical_stores(limit=1)
         store_id = stores[0]['id']
         response = self.app.get(f'/api/stores/{store_id}')
@@ -39,6 +59,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         print(f"Medical Store Detail Test Passed for Store ID: {store_id}")
 
     def test_04_pharmacists_list(self):
+        self.login_admin()
         response = self.app.get('/api/pharmacists')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
@@ -47,6 +68,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         print(f"Pharmacists List Test Passed: {len(data['pharmacists'])} pharmacists loaded.")
 
     def test_05_ocr_extraction(self):
+        self.login_admin()
         response = self.app.post('/api/ocr/extract', data={'doc_type': 'Drug License'})
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
@@ -55,6 +77,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         print(f"OCR Extraction Test Passed: Extracted 20B License {data['data']['dl_20b_number']}")
 
     def test_06_calendar_events(self):
+        self.login_admin()
         response = self.app.get('/api/calendar/events')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
@@ -145,6 +168,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         self.assertIn('queued', summary)
         self.assertIn('sent', summary)
 
+        self.login_admin()
         res_logs = self.app.get('/api/notifications/logs')
         self.assertEqual(res_logs.status_code, 200)
         logs_data = res_logs.get_json()

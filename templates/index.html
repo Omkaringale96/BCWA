@@ -174,7 +174,11 @@
                         <span class="user-role badge-role-admin" id="sidebar-user-role">Officer ID: VIN2821 &bull; Administrator</span>
                     </div>
                 </div>
-                <button class="btn btn-secondary btn-sm mt-2 w-100" id="btn-logout" title="Sign Out">
+                <button class="btn btn-secondary btn-sm mt-2 w-100" onclick="openModal('modal-change-password')" title="Change Password" style="margin-bottom:4px;">
+                    <i data-lucide="lock"></i>
+                    <span>Change Password</span>
+                </button>
+                <button class="btn btn-secondary btn-sm w-100" id="btn-logout" title="Sign Out">
                     <i data-lucide="log-out"></i>
                     <span>Sign Out</span>
                 </button>
@@ -1168,6 +1172,39 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('modal-doc-versions')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHANGE PASSWORD MODAL -->
+    <div class="modal-overlay" id="modal-change-password">
+        <div class="modal-content" style="max-width:440px;">
+            <div class="modal-header">
+                <h3><i data-lucide="lock" style="width:20px; height:20px; color:#2563EB;"></i> Change Password</h3>
+                <button class="btn-close" onclick="closeModal('modal-change-password')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Current Password *</label>
+                    <input type="password" id="cp-old-password" class="form-control" required placeholder="Enter current password">
+                </div>
+                <div class="form-group mt-3">
+                    <label>New Password *</label>
+                    <input type="password" id="cp-new-password" class="form-control" required placeholder="Enter new password (min 4 chars)">
+                </div>
+                <div class="form-group mt-3">
+                    <label>Confirm New Password *</label>
+                    <input type="password" id="cp-confirm-password" class="form-control" required placeholder="Re-enter new password">
+                </div>
+                <div id="cp-error-msg" class="text-danger mt-2" style="font-size:13px; display:none;"></div>
+                <div id="cp-success-msg" class="text-success mt-2" style="font-size:13px; display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('modal-change-password')">Cancel</button>
+                <button class="btn btn-primary" id="btn-submit-change-password" onclick="BCWAApp.submitChangePassword()">
+                    <i data-lucide="check" style="width:14px;"></i>
+                    <span>Update Password</span>
+                </button>
             </div>
         </div>
     </div>

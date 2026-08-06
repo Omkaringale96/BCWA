@@ -2,6 +2,7 @@ import random
 from datetime import datetime, timedelta
 from database import init_db
 from supabase_client import db_table
+from werkzeug.security import generate_password_hash
 
 STORE_PREFIXES = [
     "Sai", "Shree", "Mahavir", "Boishar Welfare", "Apollo", "MedPlus", "Sanjivani", 
@@ -54,7 +55,7 @@ def generate_seed_data():
         'id': 'VIN2821',
         'name': 'Vinayak',
         'email': 'vin2821@bcwaportal.in',
-        'password': '2821',
+        'password': generate_password_hash('2821'),
         'role': 'Administrator',
         'status': 'Active',
         'last_login': now_str,

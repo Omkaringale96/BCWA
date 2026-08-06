@@ -3,6 +3,7 @@ import json
 import re
 import random
 from datetime import datetime, timedelta
+from werkzeug.security import generate_password_hash, check_password_hash
 from supabase_client import db_table, upload_to_supabase_storage, test_supabase_connection
 
 def get_db_connection():
@@ -27,7 +28,7 @@ def cache_clear():
     _CACHE.clear()
 
 def init_db():
-    """Initializes startup connection test and verifies primary admin user"""
+    """Initializes startup connection test and verifies primary admin user with hashed password"""
     connected, msg = test_supabase_connection()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     try:
@@ -37,7 +38,7 @@ def init_db():
                 'id': 'VIN2821',
                 'name': 'Vinayak',
                 'email': 'vin2821@bcwaportal.in',
-                'password': '2821',
+                'password': generate_password_hash('2821'),
                 'role': 'Administrator',
                 'status': 'Active',
                 'last_login': now_str,
@@ -45,6 +46,13 @@ def init_db():
                 'updated_at': now_str
             }
             db_table('users').upsert(admin_user).execute()
+        else:
+            # Migrate plaintext passwords to hashed on startup
+            existing = res.data[0]
+            stored_pw = existing.get('password', '')
+            if stored_pw and not stored_pw.startswith(('pbkdf2:', 'scrypt:')):
+                hashed = generate_password_hash(stored_pw)
+                db_table('users').update({'password': hashed}).eq('id', 'VIN2821').execute()
     except Exception as e:
         print(f"[INIT DB WARNING] User verification deferred: {e}")
 
@@ -750,11 +758,14 @@ def get_users():
 def save_user(data):
     user_id = data.get('id') or f"USR-{random.randint(1000, 9999)}"
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    raw_pw = data.get('password', '2821')
+    # Always hash passwords before storing
+    hashed_pw = generate_password_hash(raw_pw) if raw_pw and not raw_pw.startswith(('pbkdf2:', 'scrypt:')) else raw_pw
     record = {
         'id': user_id,
         'name': data.get('name'),
         'email': data.get('email'),
-        'password': data.get('password', '2821'),
+        'password': hashed_pw,
         'role': data.get('role', 'Office Staff'),
         'status': data.get('status', 'Active'),
         'last_login': now_str,
@@ -763,10 +774,90 @@ def save_user(data):
     db_table('users').upsert(record).execute()
     return user_id
 
+def verify_admin_credentials(username, password):
+    """Verify admin/user credentials with hashed password support."""
+    try:
+        res = db_table('users').select('*').eq('id', username.upper()).execute()
+        if not res.data:
+            res = db_table('users').select('*').eq('email', username.lower()).execute()
+        if not res.data:
+            # Try case-insensitive ID match
+            res = db_table('users').select('*').eq('id', username).execute()
+        if res.data:
+            u = res.data[0]
+            if u.get('status') != 'Active':
+                return None
+            stored_pw = u.get('password', '')
+            # Support both hashed and plaintext (migration period)
+            if stored_pw.startswith(('pbkdf2:', 'scrypt:')):
+                if check_password_hash(stored_pw, password):
+                    return u
+            else:
+                # Plaintext comparison (legacy, auto-migrate)
+                if stored_pw == password:
+                    # Auto-migrate to hashed password
+                    try:
+                        hashed = generate_password_hash(password)
+                        db_table('users').update({'password': hashed}).eq('id', u['id']).execute()
+                    except Exception:
+                        pass
+                    return u
+    except Exception:
+        pass
+    return None
+
+def change_user_password(user_id, old_password, new_password):
+    """Change a user's password after verifying the old password."""
+    try:
+        res = db_table('users').select('*').eq('id', user_id).execute()
+        if not res.data:
+            return False, 'User not found'
+        user = res.data[0]
+        stored_pw = user.get('password', '')
+        # Verify old password
+        if stored_pw.startswith(('pbkdf2:', 'scrypt:')):
+            if not check_password_hash(stored_pw, old_password):
+                return False, 'Current password is incorrect'
+        else:
+            if stored_pw != old_password:
+                return False, 'Current password is incorrect'
+        # Validate new password
+        if len(new_password) < 4:
+            return False, 'New password must be at least 4 characters'
+        if new_password == old_password:
+            return False, 'New password must be different from current password'
+        # Hash and save
+        hashed = generate_password_hash(new_password)
+        db_table('users').update({'password': hashed, 'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}).eq('id', user_id).execute()
+        return True, 'Password changed successfully'
+    except Exception as e:
+        return False, str(e)
+
+def change_store_password(firm_id, old_password, new_password):
+    """Change a store account's password after verifying the old password."""
+    try:
+        account = get_store_account_by_firm_id(firm_id)
+        if not account:
+            return False, 'Store account not found'
+        stored_hash = account.get('password_hash', '')
+        if not check_password_hash(stored_hash, old_password):
+            return False, 'Current password is incorrect'
+        if len(new_password) < 4:
+            return False, 'New password must be at least 4 characters'
+        if new_password == old_password:
+            return False, 'New password must be different from current password'
+        new_hash = generate_password_hash(new_password)
+        db_table('store_accounts').update({
+            'password_hash': new_hash,
+            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }).eq('firm_id', firm_id.strip().upper()).execute()
+        return True, 'Password changed successfully'
+    except Exception as e:
+        return False, str(e)
+
 # -----------------------------------------------------------------------------
 # MEDICAL STORE SELF-SERVICE PORTAL (FIRM ACCOUNTS & AUTHENTICATION)
 # -----------------------------------------------------------------------------
-from werkzeug.security import generate_password_hash, check_password_hash
 
 def get_store_account_by_firm_id(firm_id):
     try:
