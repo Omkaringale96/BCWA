@@ -13,9 +13,12 @@
 <body>
 
     <!-- ==================================================================== -->
-    <!-- LOGIN PORTAL SCREEN OVERLAY (TOP LEVEL) -->
+    <!-- ENTERPRISE LOGIN PORTAL OVERLAY (TOP LEVEL) -->
     <!-- ==================================================================== -->
     <div class="login-screen-wrapper" id="login-screen">
+        <div class="login-bg-blob blob-1"></div>
+        <div class="login-bg-blob blob-2"></div>
+
         <div class="login-card">
             <div class="login-header">
                 <div class="login-logo">
@@ -23,44 +26,66 @@
                 </div>
                 <h2>BCWA Portal</h2>
                 <p class="login-sub">Boisar Welfare Chemist Association</p>
-                <span class="badge badge-info mt-1">Official Compliance Portal</span>
+                <div class="mt-2">
+                    <span class="badge-compliance-pill">
+                        <i data-lucide="shield-check"></i>
+                        Official Compliance Portal
+                    </span>
+                </div>
             </div>
 
-            <!-- LOGIN MODE TOGGLE TABS -->
-            <div class="d-flex mb-3 text-center" style="background:#F1F5F9; border-radius:8px; padding:4px;">
-                <button type="button" class="btn btn-sm w-50 active" id="tab-login-admin" style="border-radius:6px; font-weight:600;" onclick="BCWAApp.switchLoginTab('admin')">
-                    <i data-lucide="shield-check" style="width:14px; margin-right:4px;"></i> Admin Login
+            <!-- LOGIN SEGMENTED CONTROL TABS -->
+            <div class="login-segmented-control mb-4">
+                <button type="button" class="segmented-btn active" id="tab-login-admin" onclick="BCWAApp.switchLoginTab('admin')">
+                    <i data-lucide="shield-check"></i>
+                    <span>Admin Login</span>
                 </button>
-                <button type="button" class="btn btn-sm w-50 text-secondary" id="tab-login-store" style="border-radius:6px; font-weight:600;" onclick="BCWAApp.switchLoginTab('store')">
-                    <i data-lucide="store" style="width:14px; margin-right:4px;"></i> Store Login
+                <button type="button" class="segmented-btn" id="tab-login-store" onclick="BCWAApp.switchLoginTab('store')">
+                    <i data-lucide="store"></i>
+                    <span>Store Login</span>
                 </button>
             </div>
 
-            <div class="alert alert-danger hidden mb-3" id="login-error-alert"></div>
+            <div class="alert alert-danger hidden mb-4" id="login-error-alert"></div>
 
-            <!-- ADMIN LOGIN FORM -->
+            <!-- LOGIN FORM -->
             <form id="form-login" autocomplete="off">
                 <input type="hidden" id="login-mode" value="admin">
-                <div class="form-group mb-3">
-                    <label id="lbl-login-user">Officer ID / Username *</label>
-                    <input type="text" id="login-username" class="form-control form-control-lg" placeholder="Enter Officer ID (e.g. VIN2821)" required autocomplete="off">
+
+                <div class="form-group-floating mb-3">
+                    <div class="input-icon-wrapper">
+                        <i data-lucide="user" class="input-field-icon" id="icon-login-user"></i>
+                        <input type="text" id="login-username" class="form-control-enterprise" placeholder=" " required autocomplete="off">
+                        <label id="lbl-login-user">Officer ID / Username *</label>
+                    </div>
                 </div>
 
-                <div class="form-group mb-4">
-                    <label>Password *</label>
-                    <input type="password" id="login-password" class="form-control form-control-lg" placeholder="Enter Password" required autocomplete="new-password">
+                <div class="form-group-floating mb-4">
+                    <div class="input-icon-wrapper">
+                        <i data-lucide="lock" class="input-field-icon"></i>
+                        <input type="password" id="login-password" class="form-control-enterprise" placeholder=" " required autocomplete="new-password">
+                        <label>Password *</label>
+                    </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-login-submit">
-                    <i data-lucide="log-in"></i>
+                <button type="submit" class="btn-enterprise-primary" id="btn-login-submit">
+                    <i data-lucide="log-in" id="icon-login-btn"></i>
                     <span id="txt-login-submit">Sign In to Admin Portal</span>
                 </button>
             </form>
 
-            <div class="login-footer">
-                <p class="text-secondary" style="font-size:11px; text-align:center; margin-top:16px;" id="login-footer-text">
-                    &bull; Demo Store Accounts: <code>MED0001</code> to <code>MED0005</code> &bull; Password: <code>BCWA@123</code>
-                </p>
+            <div class="login-security-notice">
+                <i data-lucide="lock" style="width:18px; height:18px; color:#2563EB; flex-shrink:0; margin-top:2px;"></i>
+                <div>
+                    <strong>Secure Enterprise Access</strong>
+                    <p id="login-footer-text">Only authorized BCWA administrators and registered medical stores can access this portal.</p>
+                </div>
+            </div>
+
+            <div class="login-card-footer">
+                <span>BCWA Compliance Portal v2.0</span>
+                <span class="dot-separator">&bull;</span>
+                <span>Powered by Supabase &bull; Render &bull; Brevo</span>
             </div>
         </div>
     </div>

@@ -67,22 +67,23 @@ const BCWAApp = {
         if (alertBox) alertBox.classList.add('hidden');
 
         if (mode === 'store') {
-            if (adminTab) { adminTab.classList.remove('active'); adminTab.classList.add('text-secondary'); }
-            if (storeTab) { storeTab.classList.add('active'); storeTab.classList.remove('text-secondary'); }
+            if (adminTab) adminTab.classList.remove('active');
+            if (storeTab) storeTab.classList.add('active');
             if (modeInput) modeInput.value = 'store';
             if (labelUser) labelUser.textContent = 'Firm ID *';
-            if (userInput) { userInput.placeholder = 'Enter Firm ID (e.g. MED0001)'; userInput.value = ''; }
+            if (userInput) { userInput.value = ''; }
             if (submitTxt) submitTxt.textContent = 'Sign In to Store Portal';
-            if (footerTxt) footerTxt.innerHTML = '&bull; Demo Store Accounts: <code>MED0001</code> to <code>MED0005</code> &bull; Password: <code>BCWA@123</code>';
+            if (footerTxt) footerTxt.innerHTML = 'Registered Medical Store Access. Demo Accounts: <code>MED0001</code> to <code>MED0005</code> (Pass: <code>BCWA@123</code>)';
         } else {
-            if (storeTab) { storeTab.classList.remove('active'); storeTab.classList.add('text-secondary'); }
-            if (adminTab) { adminTab.classList.add('active'); adminTab.classList.remove('text-secondary'); }
+            if (storeTab) storeTab.classList.remove('active');
+            if (adminTab) adminTab.classList.add('active');
             if (modeInput) modeInput.value = 'admin';
             if (labelUser) labelUser.textContent = 'Officer ID / Username *';
-            if (userInput) { userInput.placeholder = 'Enter Officer ID (e.g. VIN2821)'; userInput.value = ''; }
+            if (userInput) { userInput.value = ''; }
             if (submitTxt) submitTxt.textContent = 'Sign In to Admin Portal';
-            if (footerTxt) footerTxt.innerHTML = '&bull; Public registration disabled. Only System Administrator can grant officer credentials.';
+            if (footerTxt) footerTxt.innerHTML = 'Only authorized BCWA administrators and registered medical stores can access this portal.';
         }
+        lucide.createIcons();
     },
 
     bindAuth() {
@@ -94,11 +95,15 @@ const BCWAApp = {
             const mode = document.getElementById('login-mode')?.value || 'admin';
             const usernameInput = document.getElementById('login-username');
             const passwordInput = document.getElementById('login-password');
+            const submitBtn = document.getElementById('btn-login-submit');
+            const submitTxt = document.getElementById('txt-login-submit');
             const username = usernameInput ? usernameInput.value.trim() : '';
             const password = passwordInput ? passwordInput.value.trim() : '';
             const alertBox = document.getElementById('login-error-alert');
 
             if (alertBox) alertBox.classList.add('hidden');
+            if (submitBtn) submitBtn.disabled = true;
+            if (submitTxt) submitTxt.textContent = 'Authenticating...';
 
             const endpoint = mode === 'store' ? '/api/auth/store-login' : '/api/auth/login';
             const payload = mode === 'store' ? { firm_id: username, password } : { officer_id: username, username, password };
@@ -126,6 +131,9 @@ const BCWAApp = {
                     alertBox.textContent = 'Server connection error. Please try again.';
                     alertBox.classList.remove('hidden');
                 }
+            } finally {
+                if (submitBtn) submitBtn.disabled = false;
+                if (submitTxt) submitTxt.textContent = mode === 'store' ? 'Sign In to Store Portal' : 'Sign In to Admin Portal';
             }
         });
 

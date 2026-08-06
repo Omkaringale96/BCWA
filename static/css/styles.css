@@ -656,60 +656,296 @@ body {
 .event-yellow { background-color: var(--warning-light); color: #B45309; border: 1px solid var(--warning-border); }
 .event-green { background-color: var(--success-light); color: var(--success); border: 1px solid var(--success-border); }
 
-/* LOGIN SCREEN STYLES */
+/* ==========================================================================
+   ENTERPRISE-GRADE LOGIN PAGE DESIGN (BCWA PORTAL v2.0)
+   ========================================================================== */
 .login-screen-wrapper {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background-color: #F8FAFC;
+    background: radial-gradient(100% 100% at 50% 0%, #EFF6FF 0%, #F8FAFC 100%);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 2000;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.login-bg-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+.blob-1 {
+    width: 420px;
+    height: 420px;
+    background: #BFDBFE;
+    top: -100px;
+    left: -100px;
+}
+
+.blob-2 {
+    width: 480px;
+    height: 480px;
+    background: #93C5FD;
+    bottom: -120px;
+    right: -100px;
 }
 
 .login-card {
     background: #FFFFFF;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    width: 420px;
-    max-width: 90vw;
-    padding: 36px 32px;
-    box-shadow: var(--shadow-lg);
+    border: 1px solid #E5E7EB;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 480px;
+    padding: 40px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+    position: relative;
+    z-index: 10;
+    animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUpFade {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .login-header {
     text-align: center;
-    margin-bottom: 24px;
+    margin-bottom: 28px;
 }
 
 .login-logo {
-    width: 52px;
-    height: 52px;
-    background-color: var(--primary);
-    color: white;
-    border-radius: 12px;
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    color: #FFFFFF;
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 12px auto;
+    margin: 0 auto 16px auto;
+    box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
+    transition: transform 0.2s ease;
+}
+
+.login-logo:hover {
+    transform: scale(1.04);
 }
 
 .login-logo i {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
 }
 
 .login-header h2 {
-    font-size: 22px;
+    font-size: 32px;
     font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: -0.3px;
+    color: #111827;
+    letter-spacing: -0.8px;
+    margin-bottom: 4px;
 }
 
 .login-sub {
+    font-size: 14px;
+    color: #6B7280;
+    font-weight: 400;
+}
+
+.badge-compliance-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: #EFF6FF;
+    color: #2563EB;
+    border: 1px solid #BFDBFE;
+    border-radius: 9999px;
+    padding: 4px 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Segmented Control Login Tabs */
+.login-segmented-control {
+    display: flex;
+    background: #F1F5F9;
+    border-radius: 12px;
+    padding: 4px;
+    position: relative;
+    border: 1px solid #E2E8F0;
+}
+
+.segmented-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    color: #64748B;
     font-size: 13px;
-    color: var(--text-secondary);
-    margin-top: 2px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.segmented-btn i {
+    width: 16px;
+    height: 16px;
+}
+
+.segmented-btn:hover {
+    color: #1E293B;
+}
+
+.segmented-btn.active {
+    background: #FFFFFF;
+    color: #2563EB;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+/* Floating Label Inputs */
+.form-group-floating {
+    position: relative;
+}
+
+.input-icon-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-field-icon {
+    position: absolute;
+    left: 16px;
+    width: 20px;
+    height: 20px;
+    color: #94A3B8;
+    transition: color 0.2s ease;
+    pointer-events: none;
+}
+
+.form-control-enterprise {
+    width: 100%;
+    height: 54px;
+    padding: 22px 16px 6px 48px;
+    background: #FFFFFF;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #111827;
+    transition: all 0.2s ease;
+}
+
+.form-control-enterprise:focus {
+    outline: none;
+    border-color: #2563EB;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+}
+
+.input-icon-wrapper:focus-within .input-field-icon {
+    color: #2563EB;
+}
+
+.form-group-floating label {
+    position: absolute;
+    left: 48px;
+    top: 17px;
+    font-size: 13px;
+    color: #64748B;
+    font-weight: 400;
+    pointer-events: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.form-control-enterprise:focus ~ label,
+.form-control-enterprise:not(:placeholder-shown) ~ label {
+    top: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #2563EB;
+}
+
+/* Enterprise Button */
+.btn-enterprise-primary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 54px;
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    color: #FFFFFF;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+    transition: all 0.2s ease;
+}
+
+.btn-enterprise-primary:hover {
+    background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+}
+
+.btn-enterprise-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+}
+
+/* Security Notice Box */
+.login-security-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-top: 24px;
+    font-size: 12px;
+}
+
+.login-security-notice strong {
+    color: #1E293B;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.login-security-notice p {
+    color: #64748B;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.login-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 20px;
+    font-size: 11px;
+    color: #94A3B8;
+}
+
+.dot-separator {
+    color: #CBD5E1;
 }
 
 .modal-overlay, .drawer-overlay {
