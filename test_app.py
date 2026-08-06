@@ -34,7 +34,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         self.assertIn('total_stores', data)
         self.assertIn('total_pharmacists', data)
         self.assertEqual(data['total_stores'], 20)
-        self.assertGreaterEqual(data['total_pharmacists'], 40)
+        self.assertEqual(data['total_pharmacists'], 20)
         print(f"Dashboard Stats Test Passed: {data['total_stores']} stores, {data['total_pharmacists']} pharmacists.")
 
     def test_02_medical_stores_list(self):
@@ -64,7 +64,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
         self.assertIn('pharmacists', data)
-        self.assertGreaterEqual(len(data['pharmacists']), 40)
+        self.assertEqual(len(data['pharmacists']), 20)
         print(f"Pharmacists List Test Passed: {len(data['pharmacists'])} pharmacists loaded.")
 
     def test_05_ocr_extraction(self):
@@ -209,19 +209,19 @@ class BCWAPortalTestCase(unittest.TestCase):
         from seed_data import generate_seed_data
         generate_seed_data()
 
-        # Test Store Login with Firm ID MED0001
-        res = self.app.post('/api/auth/store-login', json={'firm_id': 'MED0001', 'password': 'BCWA@123'})
+        # Test Store Login with Firm ID BCWA-MED-000001
+        res = self.app.post('/api/auth/store-login', json={'firm_id': 'BCWA-MED-000001', 'password': 'BCWA@1001'})
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertTrue(data.get('success'))
         self.assertEqual(data['user']['role'], 'Store')
-        self.assertEqual(data['user']['firm_id'], 'MED0001')
+        self.assertEqual(data['user']['firm_id'], 'BCWA-MED-000001')
 
         # Test Store Dashboard API
         res_dash = self.app.get('/api/store/dashboard')
         self.assertEqual(res_dash.status_code, 200)
         dash_data = res_dash.get_json()
-        self.assertEqual(dash_data['firm_id'], 'MED0001')
+        self.assertEqual(dash_data['firm_id'], 'BCWA-MED-000001')
 
         # Test Store Documents API
         res_docs = self.app.get('/api/store/documents')

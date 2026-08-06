@@ -49,8 +49,9 @@ def generate_seed_data():
 
     now = datetime.now()
     now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+    today = now.date()
 
-    # Seed ONLY Administrator Account (Vinayak VIN2821)
+    # 1. Seed Administrator Account (Vinayak VIN2821)
     admin_user = {
         'id': 'VIN2821',
         'name': 'Vinayak',
@@ -69,9 +70,15 @@ def generate_seed_data():
     documents_list = []
     activity_logs = []
     notifications = []
+    notif_queue_list = []
+    notif_logs_list = []
+
+    # Expiry offset days for 20 stores to cover all target reminder stages:
+    # Expired (-10), 1d, 3d, 7d, 10d, 15d, 30d, 60d, 90d, 120d, 180d, 365d, etc.
+    stage_offsets = [-10, 1, 3, 7, 10, 15, 30, 60, 90, 120, 180, 240, 365, 400, 500, 600, 700, 14, 45, 730]
 
     for i in range(1, 21):
-        store_id = f"MS-10{i:02d}"
+        store_id = f"BCWA-MED-{i:06d}"
         firm_id = f"BCWA-MED-{i:06d}"
         shop_code = f"BCWA-BSR-{100 + i}"
         store_name = f"{STORE_PREFIXES[(i-1) % len(STORE_PREFIXES)]} {STORE_SUFFIXES[(i-1) % len(STORE_SUFFIXES)]}"
@@ -79,18 +86,21 @@ def generate_seed_data():
         owner_mobile = "8766759824"
         owner_email = "bhosalevinayakwe@gmail.com"
         
-        dl_20b = f"MH-TZ4-{random.randint(100000, 999999)}"
-        dl_21b = f"MH-TZ4-{random.randint(100000, 999999)}"
-        fssai_num = f"21524{random.randint(100000000, 999999999)}"
+        dl_20b = f"MH-TZ4-{100000 + i*4321 % 899999}"
+        dl_21b = f"MH-TZ4-{100000 + i*5678 % 899999}"
+        fssai_num = f"21524{100000000 + i*9876543 % 899999999}"
         
-        issue_days_ago = random.randint(300, 1400)
-        expiry_days_ahead = random.randint(-40, 730)
+        offset = stage_offsets[i - 1]
+        dl_expiry_date = today + timedelta(days=offset)
+        dl_issue_date = dl_expiry_date - timedelta(days=1825)  # 5 years valid
         
-        dl_issue = (now - timedelta(days=issue_days_ago)).strftime('%Y-%m-%d')
-        dl_expiry = (now + timedelta(days=expiry_days_ahead)).strftime('%Y-%m-%d')
-        
-        fssai_issue = (now - timedelta(days=issue_days_ago - 50)).strftime('%Y-%m-%d')
-        fssai_expiry = (now + timedelta(days=expiry_days_ahead + 60)).strftime('%Y-%m-%d')
+        fssai_expiry_date = today + timedelta(days=offset + 10)
+        fssai_issue_date = fssai_expiry_date - timedelta(days=1825)
+
+        dl_issue = dl_issue_date.strftime('%Y-%m-%d')
+        dl_expiry = dl_expiry_date.strftime('%Y-%m-%d')
+        fssai_issue = fssai_issue_date.strftime('%Y-%m-%d')
+        fssai_expiry = fssai_expiry_date.strftime('%Y-%m-%d')
 
         st_obj = {
             'id': store_id,
@@ -103,8 +113,8 @@ def generate_seed_data():
             'owner_mobile': owner_mobile,
             'owner_whatsapp': owner_mobile,
             'owner_email': owner_email,
-            'owner_pan': f"ABCDE{random.randint(1000,9999)}F",
-            'owner_aadhaar': f"4321 {random.randint(1000,9999)} {random.randint(1000,9999)}",
+            'owner_pan': f"ABCDE{1000 + i}F",
+            'owner_aadhaar': f"4321 {1000 + i} {2000 + i}",
             'owner_address': f"Plot {i*4}, Boisar West, Palghar",
             'owner_photo': "",
             'store_logo': "",
@@ -112,12 +122,12 @@ def generate_seed_data():
             'contact_phone': owner_mobile,
             'contact_email': owner_email,
             'address_line1': f"Shop No. {i}, Ostwal Empire",
-            'address_line2': AREAS_BOISAR[i % len(AREAS_BOISAR)],
+            'address_line2': AREAS_BOISAR[(i - 1) % len(AREAS_BOISAR)],
             'area': "Boisar",
             'city': "Palghar",
             'state': "Maharashtra",
             'pincode': "401501",
-            'google_map_url': f"https://maps.google.com/?q=19.8000,72.7500",
+            'google_map_url': "https://maps.google.com/?q=19.8000,72.7500",
             'gps_coordinates': "19.8000, 72.7500",
             'dl_20b_number': dl_20b,
             'dl_21b_number': dl_21b,
@@ -129,138 +139,155 @@ def generate_seed_data():
             'fssai_issue_date': fssai_issue,
             'fssai_expiry_date': fssai_expiry,
             'status': "Active",
-            'compliance_score': 95 if expiry_days_ahead > 60 else (75 if expiry_days_ahead > 0 else 40),
-            'compliance_status': "Excellent" if expiry_days_ahead > 60 else ("Good" if expiry_days_ahead > 0 else "Critical"),
+            'compliance_score': 95 if offset > 60 else (75 if offset > 0 else 40),
+            'compliance_status': "Excellent" if offset > 60 else ("Good" if offset > 0 else "Critical"),
             'created_at': now_str,
             'updated_at': now_str
         }
         stores_list.append(st_obj)
 
-        num_pharmacists = random.randint(2, 3)
-        for p_idx in range(num_pharmacists):
-            ph_id = f"PH-{i:02d}{p_idx+1}"
-            ph_name = f"{FIRST_NAMES[(i+p_idx*3) % len(FIRST_NAMES)]} {LAST_NAMES[(i+p_idx*5) % len(LAST_NAMES)]}"
-            mspc_num = f"MSPC-{random.randint(100000, 999999)}"
-            ppp_num = f"PPP-MH-{random.randint(100000, 999999)}"
-            
-            ppp_exp_days = random.randint(-15, 600)
-            ppp_expiry = (now + timedelta(days=ppp_exp_days)).strftime('%Y-%m-%d')
-            
-            ph_obj = {
-                'id': ph_id,
-                'store_id': store_id,
-                'full_name': ph_name,
-                'photo': "",
-                'mspc_number': mspc_num,
-                'ppp_number': ppp_num,
-                'ppp_expiry': ppp_expiry,
-                'reg_expiry': ppp_expiry,
-                'qualification': QUALIFICATIONS[random.randint(0, len(QUALIFICATIONS)-1)],
-                'joining_date': (now - timedelta(days=random.randint(100, 800))).strftime('%Y-%m-%d'),
-                'leaving_date': None,
-                'mobile': "8766759824",
-                'email': "bhosalevinayakwe@gmail.com",
-                'status': "Active",
-                'ppp_card_url': f"/static/docs/ppp_{ph_id}.pdf",
-                'degree_cert_url': f"/static/docs/degree_{ph_id}.pdf",
-                'reg_cert_url': f"/static/docs/reg_{ph_id}.pdf",
-                'created_at': now_str,
-                'updated_at': now_str
-            }
-            pharmacists_list.append(ph_obj)
+        # Exactly 1 Pharmacist per Medical Store (20 Pharmacists Total)
+        ph_id = f"PH-{i:02d}"
+        ph_name = f"{FIRST_NAMES[(i*3) % len(FIRST_NAMES)]} {LAST_NAMES[(i*4) % len(LAST_NAMES)]}"
+        mspc_num = f"MSPC-{100000 + i*1234 % 899999}"
+        ppp_num = f"PPP-MH-{100000 + i*5678 % 899999}"
+        
+        ppp_exp_days = offset + 5
+        ppp_expiry = (today + timedelta(days=ppp_exp_days)).strftime('%Y-%m-%d')
+        
+        ph_obj = {
+            'id': ph_id,
+            'store_id': store_id,
+            'full_name': ph_name,
+            'photo': "",
+            'mspc_number': mspc_num,
+            'ppp_number': ppp_num,
+            'ppp_expiry': ppp_expiry,
+            'reg_expiry': ppp_expiry,
+            'qualification': QUALIFICATIONS[i % len(QUALIFICATIONS)],
+            'joining_date': (now - timedelta(days=300 + i*20)).strftime('%Y-%m-%d'),
+            'leaving_date': None,
+            'mobile': "8766759824",
+            'email': "bhosalevinayakwe@gmail.com",
+            'status': "Active",
+            'ppp_card_url': f"/static/docs/{firm_id}_PPP_Card.pdf",
+            'degree_cert_url': f"/static/docs/{firm_id}_Degree_Certificate.pdf",
+            'reg_cert_url': f"/static/docs/{firm_id}_Registration_Certificate.pdf",
+            'created_at': now_str,
+            'updated_at': now_str
+        }
+        pharmacists_list.append(ph_obj)
 
-        for cat in ["Drug License", "Food License", "PPP Cards", "Rent Agreement", "Namuna 8", "Light Bill"]:
-            doc_id = f"DOC-{i:02d}-{random.randint(100,999)}"
+        # 11 Documents per Medical Store (220 total test documents)
+        store_docs = [
+            ("Drug License", True, dl_issue, dl_expiry, f"DL-{dl_20b}"),
+            ("Food License", True, fssai_issue, fssai_expiry, fssai_num),
+            ("Rent Agreement", False, None, None, f"LEASE-{1000+i}"),
+            ("Light Bill", False, None, None, f"MSEDCL-{4000+i}"),
+            ("Namuna 8", False, None, None, f"NAMUNA8-{5000+i}"),
+            ("GST Certificate", True, "2020-01-01", dl_expiry, f"27AAAAA{1000+i}A1Z5"),
+            ("Shop Act License", True, "2021-04-01", dl_expiry, f"SHOP-ACT-{7000+i}"),
+            ("Registration Certificate", True, "2020-05-15", ppp_expiry, mspc_num),
+            ("Owner Aadhaar", False, None, None, f"4321 {1000 + i} {2000 + i}"),
+            ("Owner PAN", False, None, None, f"ABCDE{1000 + i}F"),
+            ("Pharmacist PPP Card", True, "2021-01-01", ppp_expiry, ppp_num)
+        ]
+
+        for d_idx, (cat, is_exp, issue_dt, exp_dt, d_num) in enumerate(store_docs):
+            doc_id = f"DOC-{i:02d}-{d_idx+1:02d}"
             documents_list.append({
                 'id': doc_id,
                 'store_id': store_id,
+                'firm_id': firm_id,
                 'category': cat,
                 'title': f"{cat} - {store_name}",
+                'document_number': d_num,
                 'file_name': f"{cat.lower().replace(' ', '_')}_{store_id}.pdf",
                 'file_url': f"/static/docs/{cat.lower().replace(' ', '_')}_{store_id}.pdf",
-                'file_size_kb': random.randint(120, 850),
+                'storage_path': f"{firm_id}/{cat}/{cat.lower().replace(' ', '_')}_{store_id}.pdf",
+                'file_size_kb': 250 + d_idx * 15,
                 'version': 1,
-                'issue_date': dl_issue,
-                'expiry_date': dl_expiry,
+                'is_latest': True,
+                'is_expiry_doc': is_exp,
+                'reminder_enabled': is_exp,
+                'renewal_required': is_exp,
+                'issue_date': issue_dt,
+                'expiry_date': exp_dt,
                 'quality_status': "Passed",
-                'quality_notes': "DPI scan verified readable",
-                'uploaded_by': "Office Staff",
+                'quality_notes': "High DPI verification clear",
+                'uploaded_by': "Administrator",
                 'created_at': now_str,
                 'updated_at': now_str
             })
 
-        if expiry_days_ahead <= 90:
-            notifications.append({
-                'id': f"NOTIF-{i:02d}-DL",
+        # Notifications & Queue history generator
+        if offset <= 90:
+            stage_name = f"{offset} Day" if offset > 0 else "Expired"
+            notif_queue_list.append({
+                'id': f"Q-DL-{i:02d}",
                 'store_id': store_id,
-                'title': f"Drug License Renewal Warning - {store_name}",
-                'message': f"Drug License 20B/21B expires on {dl_expiry}. Please initiate renewal.",
-                'type': "Warning" if expiry_days_ahead > 0 else "Danger",
-                'target_date': dl_expiry,
-                'days_remaining': expiry_days_ahead,
-                'is_read': False,
+                'recipient_name': owner_name,
+                'recipient_email': owner_email,
+                'document_type': 'Drug License',
+                'document_number': dl_20b,
+                'days_remaining': offset,
+                'email_subject': f"BCWA Reminder – Drug License expires in {offset} days",
+                'email_body_html': f"<p>Reminder notice for {store_name}</p>",
+                'status': "Pending" if offset > 0 else "Sent",
+                'retry_count': 0,
+                'created_at': now_str
+            })
+            notif_logs_list.append({
+                'id': f"LOG-DL-{i:02d}",
+                'store_id': store_id,
+                'recipient_name': owner_name,
+                'recipient_email': owner_email,
+                'document_type': 'Drug License',
+                'document_number': dl_20b,
+                'days_remaining': offset,
+                'email_subject': f"BCWA Notice – Drug License {stage_name}",
+                'delivery_status': "Success" if i % 5 != 0 else "Failed",
+                'sent_at': now_str,
                 'created_at': now_str
             })
 
+    # Clear old data and insert 20 Stores, 20 Pharmacists, 220 Documents
     db_table('medical_stores').insert(stores_list).execute()
     db_table('pharmacists').insert(pharmacists_list).execute()
     db_table('documents').insert(documents_list).execute()
-    if notifications:
-        db_table('notifications').insert(notifications).execute()
+    if notif_queue_list:
+        db_table('notification_queue').insert(notif_queue_list).execute()
+    if notif_logs_list:
+        db_table('notification_logs').insert(notif_logs_list).execute()
 
     activity_logs.append({
         'id': f"ACT-{random.randint(10000, 99999)}",
         'user_name': "System",
-        'action': "Database Initialized",
-        'details': f"Seeded {len(stores_list)} stores, {len(pharmacists_list)} pharmacists, and {len(documents_list)} documents.",
+        'action': "Database Seed Complete",
+        'details': f"Seeded {len(stores_list)} stores, {len(pharmacists_list)} pharmacists, {len(documents_list)} documents.",
         'store_id': None,
         'created_at': now_str
     })
     db_table('activity_logs').insert(activity_logs).execute()
 
-    print(f"Generating exact 20 Medical Stores synthetic dataset for BCWA Portal...")
+    print("Generating exact 20 Medical Stores synthetic dataset for BCWA Portal...")
     print(f"Seed generation complete: Exactly {len(stores_list)} Medical Stores, {len(pharmacists_list)} Pharmacists, {len(documents_list)} Documents created successfully.")
 
-    # Ensure ALL existing stores and pharmacists in database are updated with target mobile and email
-    try:
-        existing_stores = db_table('medical_stores').select('*').execute().data or []
-        for s in existing_stores:
-            s_id = s.get('id')
-            db_table('medical_stores').update({
-                'owner_mobile': '8766759824',
-                'owner_whatsapp': '8766759824',
-                'owner_email': 'bhosalevinayakwe@gmail.com',
-                'contact_phone': '8766759824',
-                'contact_email': 'bhosalevinayakwe@gmail.com'
-            }).eq('id', s_id).execute()
-
-        existing_pharmacists = db_table('pharmacists').select('*').execute().data or []
-        for p in existing_pharmacists:
-            p_id = p.get('id')
-            db_table('pharmacists').update({
-                'mobile': '8766759824',
-                'email': 'bhosalevinayakwe@gmail.com'
-            }).eq('id', p_id).execute()
-    except Exception as e:
-        print(f"[SEED UPDATE NOTICE] {e}")
-
-    # Seed Demo Store Accounts (MED0001 to MED0005) & Sample PDFs
+    # Seed 20 Store Accounts (BCWA-MED-000001 to BCWA-MED-000020) & Passwords (BCWA@1001 to BCWA@1020)
     try:
         from database import create_or_update_store_account
         from sample_pdf_generator import ensure_sample_pdfs_for_store
 
-        demo_stores = [
-            ("MED0001", "MS-1001", "Vinayak Bhosale", "Apex Chemist & Druggists"),
-            ("MED0002", "MS-1002", "Rajesh Sharma", "Lifeline Medicare"),
-            ("MED0003", "MS-1003", "Amit Patil", "Care & Cure Pharma"),
-            ("MED0004", "MS-1004", "Sunil Verma", "Wellness Medicals"),
-            ("MED0005", "MS-1005", "Pooja Mehta", "National Pharmacy")
-        ]
+        for i in range(1, 21):
+            firm_id = f"BCWA-MED-{i:06d}"
+            store_id = f"BCWA-MED-{i:06d}"
+            password = f"BCWA@{1000 + i}"
+            store_name = stores_list[i-1]['store_name']
+            owner_name = stores_list[i-1]['owner_name']
 
-        for firm_id, store_id, owner_name, store_name in demo_stores:
             create_or_update_store_account(
                 firm_id=firm_id,
-                password="BCWA@123",
+                password=password,
                 store_id=store_id,
                 owner_name=owner_name,
                 store_name=store_name,
@@ -269,7 +296,7 @@ def generate_seed_data():
                 status="Active"
             )
             ensure_sample_pdfs_for_store(store_id, store_name)
-        print("Demo Store Accounts (MED0001-MED0005) seeded successfully.")
+        print("Demo Store Accounts (BCWA-MED-000001 to BCWA-MED-000020 with BCWA@1001..1020) seeded successfully.")
     except Exception as e:
         print(f"[STORE ACCOUNTS SEED NOTICE] {e}")
 
