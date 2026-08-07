@@ -113,24 +113,37 @@ def compress_response(response):
     return response
 
 def start_keep_alive_engine():
-    """Background thread that pings server health endpoint every 10 minutes to prevent Render free-tier idle spin-down."""
+    """Background thread that pings server health endpoint every 3 minutes to prevent Render free-tier idle spin-down."""
     import urllib.request
     import threading
     def ping_worker():
-        time.sleep(30)
-        url = os.environ.get('RENDER_EXTERNAL_URL', 'https://bcwa.onrender.com').rstrip('/') + '/api/health'
+        time.sleep(15)
+        external_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://bcwa.onrender.com').rstrip('/') + '/api/health'
+        port = os.environ.get('PORT', '5000')
+        local_url = f"http://127.0.0.1:{port}/api/health"
+
         while True:
+            # 1. External Ping (Keeps Render free-tier load balancer & compute awake 24/7)
             try:
-                req = urllib.request.Request(url, headers={'User-Agent': 'BCWA-KeepAlive/1.0'})
+                req = urllib.request.Request(external_url, headers={'User-Agent': 'BCWA-KeepAlive/1.0'})
                 with urllib.request.urlopen(req, timeout=10) as resp:
-                    logging.info(f"[KEEP-ALIVE] Self-ping successful ({url}) - Status {resp.status}")
+                    logging.info(f"[KEEP-ALIVE] External self-ping successful ({external_url}) - Status {resp.status}")
             except Exception as e:
-                logging.warning(f"[KEEP-ALIVE NOTICE] Self-ping ({url}): {e}")
-            time.sleep(600)
+                logging.warning(f"[KEEP-ALIVE NOTICE] External self-ping ({external_url}): {e}")
+
+            # 2. Local Ping
+            try:
+                req_loc = urllib.request.Request(local_url, headers={'User-Agent': 'BCWA-KeepAlive/1.0'})
+                with urllib.request.urlopen(req_loc, timeout=5) as resp_loc:
+                    logging.info(f"[KEEP-ALIVE] Local self-ping successful ({local_url}) - Status {resp_loc.status}")
+            except Exception:
+                pass
+
+            time.sleep(180)  # Ping every 3 minutes (180s) to guarantee zero sleep
 
     thread = threading.Thread(target=ping_worker, daemon=True)
     thread.start()
-    logging.info("[KEEP-ALIVE] Render Keep-Alive daemon thread started.")
+    logging.info("[KEEP-ALIVE] Render 3-Minute Keep-Alive daemon thread started.")
 
 import uuid
 SERVER_STARTUP_ID = uuid.uuid4().hex
