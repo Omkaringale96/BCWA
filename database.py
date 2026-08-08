@@ -502,13 +502,19 @@ def save_medical_store(data):
         'id': store_id,
         'firm_id': firm_id,
         'store_name': store_name,
+        'storeName': store_name,
         'shop_code': shop_code,
+        'shopCode': shop_code,
         'business_type': data.get('business_type') or 'Retail Pharmacy',
+        'businessType': data.get('business_type') or 'Retail Pharmacy',
         'drug_license_category': data.get('drug_license_category') or '20B / 21B',
         'owner_name': owner_name,
+        'ownerName': owner_name,
         'owner_mobile': owner_mobile,
+        'ownerMobile': owner_mobile,
         'owner_whatsapp': (data.get('owner_whatsapp') or '').strip() or owner_mobile,
         'owner_email': (data.get('owner_email') or '').strip(),
+        'ownerEmail': (data.get('owner_email') or '').strip(),
         'owner_pan': (data.get('owner_pan') or '').strip(),
         'owner_aadhaar': (data.get('owner_aadhaar') or '').strip(),
         'owner_address': (data.get('owner_address') or '').strip(),
@@ -517,6 +523,7 @@ def save_medical_store(data):
         'store_photo': data.get('store_photo') or '',
         'contact_phone': owner_mobile,
         'contact_email': (data.get('owner_email') or '').strip(),
+        'address': (data.get('address_line1') or '').strip() or 'Boisar, Palghar',
         'address_line1': (data.get('address_line1') or '').strip() or 'Boisar West',
         'address_line2': (data.get('address_line2') or '').strip(),
         'area': (data.get('area') or '').strip() or 'Boisar',
@@ -526,18 +533,26 @@ def save_medical_store(data):
         'google_map_url': data.get('google_map_url') or '',
         'gps_coordinates': data.get('gps_coordinates') or '19.8000, 72.7500',
         'dl_20b_number': dl_20b,
+        'dl20b': dl_20b,
         'dl_21b_number': dl_21b,
+        'dl21b': dl_21b,
         'dl_issue_date': data.get('dl_issue_date') or today_str,
         'dl_expiry_date': data.get('dl_expiry_date') or today_plus_5,
+        'dlExpiry': data.get('dl_expiry_date') or today_plus_5,
         'dl_issuing_authority': data.get('dl_issuing_authority') or 'FDA Maharashtra',
         'dl_renewal_date': data.get('dl_renewal_date') or data.get('dl_expiry_date') or today_plus_5,
         'fssai_number': fssai,
+        'fssaiNumber': fssai,
         'fssai_issue_date': data.get('fssai_issue_date') or data.get('dl_issue_date') or today_str,
         'fssai_expiry_date': data.get('fssai_expiry_date') or today_plus_5,
+        'fssaiExpiry': data.get('fssai_expiry_date') or today_plus_5,
         'status': data.get('status') or 'Active',
         'compliance_score': 100,
+        'complianceScore': 100,
         'compliance_status': 'Excellent',
-        'updated_at': now_str
+        'complianceStatus': 'Excellent',
+        'updated_at': now_str,
+        'updatedAt': now_str
     }
 
     print(f"[STORE REGISTRATION PAYLOAD] Store ID: {store_id} | Firm ID: {firm_id} | Payload:\n{json.dumps(record, indent=2)}")
@@ -548,6 +563,7 @@ def save_medical_store(data):
     try:
         if is_new:
             db_record['created_at'] = now_str
+            db_record['createdAt'] = now_str
             res_db = db_table('medical_stores').insert(db_record).execute()
             print(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Supabase | Store ID: {store_id} | Response: {res_db.data}")
             logging.info(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Supabase | Store ID: {store_id} | Response: {res_db.data}")
@@ -579,7 +595,12 @@ def save_medical_store(data):
         ph_list = db_table('pharmacists').select('*').eq('store_id', store_id).execute().data or []
         doc_cnt = len(db_table('documents').select('*').eq('store_id', store_id).execute().data or [])
         score, status_str = calculate_compliance_score(record, ph_list, doc_cnt)
-        db_table('medical_stores').update({'compliance_score': score, 'compliance_status': status_str}).eq('id', store_id).execute()
+        db_table('medical_stores').update({
+            'compliance_score': score,
+            'complianceScore': score,
+            'compliance_status': status_str,
+            'complianceStatus': status_str
+        }).eq('id', store_id).execute()
     except Exception as e_comp:
         logging.warning(f"[COMPLIANCE CALC NOTICE] {e_comp}")
 
