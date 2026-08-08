@@ -9,13 +9,13 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isAuthenticated() && (
-        !('role' in request.auth.token) ||
-        request.auth.token.role == 'SuperAdmin' ||
-        request.auth.token.role == 'Admin' ||
-        request.auth.token.role == 'AssociationAdmin' ||
-        request.auth.token.role == 'Staff' ||
         request.auth.uid == 'admin_vin2821' ||
-        request.auth.email == 'bhosalevinayakpsnl@gmail.com'
+        ('role' in request.auth.token && (
+          request.auth.token.role == 'SuperAdmin' ||
+          request.auth.token.role == 'Admin' ||
+          request.auth.token.role == 'AssociationAdmin' ||
+          request.auth.token.role == 'Staff'
+        ))
       );
     }
 
@@ -35,39 +35,33 @@ service cloud.firestore {
         resource.data.store_id == request.auth.token.store_id;
     }
 
-    function isStoreOwnerForNewDoc() {
-      return isAuthenticated() &&
-        'role' in request.auth.token &&
-        request.auth.token.role == 'StoreOwner' &&
-        'store_id' in request.auth.token &&
-        request.resource.data.store_id == request.auth.token.store_id;
-    }
-
     // Medical Stores Collection
     match /medical_stores/{storeId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-      allow delete: if isSuperAdmin();
+      allow read: if isSuperAdmin() || isStoreOwner(storeId);
+      allow create, update, delete: if isSuperAdmin();
     }
 
     match /stores/{storeId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-      allow delete: if isSuperAdmin();
+      allow read: if isSuperAdmin() || isStoreOwner(storeId);
+      allow create, update, delete: if isSuperAdmin();
     }
 
     // Documents Collection
     match /documents/{docId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-      allow delete: if isSuperAdmin() || isStoreOwnerForDoc();
+      allow read: if isSuperAdmin() || isStoreOwnerForDoc();
+      allow create: if isSuperAdmin() || (
+        isAuthenticated() &&
+        'role' in request.auth.token &&
+        request.auth.token.role == 'StoreOwner' &&
+        request.resource.data.store_id == request.auth.token.store_id
+      );
+      allow update, delete: if isSuperAdmin() || isStoreOwnerForDoc();
     }
 
     // Pharmacists Collection
     match /pharmacists/{phId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-      allow delete: if isSuperAdmin() || isStoreOwnerForDoc();
+      allow read: if isSuperAdmin() || isStoreOwnerForDoc();
+      allow create, update, delete: if isSuperAdmin();
     }
 
     // Audit Logs Collection
@@ -78,9 +72,7 @@ service cloud.firestore {
 
     // Store Accounts Collection
     match /store_accounts/{accId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-      allow delete: if isSuperAdmin();
+      allow read, create, update, delete: if isSuperAdmin();
     }
 
     // Other System Collections
@@ -89,7 +81,7 @@ service cloud.firestore {
     match /admin_users/{doc=**} { allow read, write: if isAuthenticated(); }
 
     match /{document=**} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isSuperAdmin();
     }
   }
 }

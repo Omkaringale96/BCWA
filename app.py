@@ -360,6 +360,7 @@ def api_mobile_admin_login():
             uid = f"admin_{user_found['id'].lower()}"
             custom_claims = {
                 "role": "SuperAdmin",
+                "officer_id": user_found.get('officer_id', 'VIN2821'),
                 "name": user_found.get('name', 'Vinayak')
             }
             firebase_token = firebase_auth.create_custom_token(uid, developer_claims=custom_claims).decode("utf-8")
