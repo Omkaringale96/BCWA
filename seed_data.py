@@ -59,13 +59,14 @@ def clear_production_database():
     init_db()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # 1. Reset 'users' table - Keep ONLY Administrator Account (VIN2821)
+    # 1. Reset 'users' table - Keep SuperAdmin Account (DATTA)
     admin_user = {
-        'id': 'VIN2821',
-        'name': 'Vinayak',
-        'email': 'vin2821@bcwaportal.in',
-        'password': generate_password_hash('2821'),
-        'role': 'Administrator',
+        'id': 'DATTA',
+        'officer_id': 'DATTA',
+        'name': 'Datta',
+        'email': 'datta.admin@bcwa.org',
+        'password': generate_password_hash('555'),
+        'role': 'SuperAdmin',
         'status': 'Active',
         'last_login': now_str,
         'created_at': now_str,
