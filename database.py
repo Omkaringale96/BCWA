@@ -565,8 +565,8 @@ def save_medical_store(data):
             db_record['created_at'] = now_str
             db_record['createdAt'] = now_str
             res_db = db_table('medical_stores').insert(db_record).execute()
-            print(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Supabase | Store ID: {store_id} | Response: {res_db.data}")
-            logging.info(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Supabase | Store ID: {store_id} | Response: {res_db.data}")
+            print(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Firestore | Store ID: {store_id} | Response: {res_db.data}")
+            logging.info(f"[STORE INSERT SUCCESS] Store '{store_name}' inserted successfully into Firestore | Store ID: {store_id} | Response: {res_db.data}")
             
             # Write Activity Log ONLY AFTER database insert succeeds
             try:
@@ -575,8 +575,8 @@ def save_medical_store(data):
                 logging.warning(f"[ACTIVITY LOG NOTICE] {e_act}")
         else:
             res_db = db_table('medical_stores').update(db_record).eq('id', store_id).execute()
-            print(f"[STORE UPDATE SUCCESS] Store '{store_name}' updated successfully in Supabase | Store ID: {store_id} | Response: {res_db.data}")
-            logging.info(f"[STORE UPDATE SUCCESS] Store '{store_name}' updated successfully in Supabase | Store ID: {store_id} | Response: {res_db.data}")
+            print(f"[STORE UPDATE SUCCESS] Store '{store_name}' updated successfully in Firestore | Store ID: {store_id} | Response: {res_db.data}")
+            logging.info(f"[STORE UPDATE SUCCESS] Store '{store_name}' updated successfully in Firestore | Store ID: {store_id} | Response: {res_db.data}")
             
             # Write Activity Log ONLY AFTER database update succeeds
             try:
@@ -585,7 +585,7 @@ def save_medical_store(data):
                 logging.warning(f"[ACTIVITY LOG NOTICE] {e_act}")
     except Exception as e:
         import traceback
-        err_detail = f"Failed to save Medical Store '{store_name}' to Supabase: {str(e)}"
+        err_detail = f"Failed to save Medical Store '{store_name}' to Firestore: {str(e)}"
         print(f"[STORE REGISTRATION FAILURE] {err_detail}\n{traceback.format_exc()}")
         logging.error(f"[STORE REGISTRATION FAILURE] {err_detail}\n{traceback.format_exc()}")
         # DO NOT write Activity Log if database insert failed!
