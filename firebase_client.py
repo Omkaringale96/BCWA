@@ -19,7 +19,7 @@ except ImportError:
 _firebase_app = None
 _firestore_db = None
 
-DEFAULT_STORAGE_BUCKET = "bcwa-233d5.appspot.com"
+DEFAULT_STORAGE_BUCKET = "bcwa-233d5.firebasestorage.app"
 
 CATEGORY_FOLDER_MAP = {
     'drug license': 'DrugLicense',
@@ -411,24 +411,36 @@ def upload_to_firebase_storage(file_obj, filename, category="Other Documents", f
 
     preview_url = f"/static/docs/{clean_filename}"
 
-    # Try Firebase Storage if bucket exists
     db = get_firebase_db()
-    if HAS_FIREBASE_SDK and db:
+    if not (HAS_FIREBASE_SDK and db):
+        return {
+            'success': False,
+            'error': 'Firebase Storage SDK is uninitialized or unavailable.'
+        }
+
+    try:
+        bucket = storage.bucket()
+        blob = bucket.blob(file_path)
+        blob.upload_from_string(content, content_type=mime_type)
         try:
-            bucket = storage.bucket()
-            blob = bucket.blob(file_path)
-            blob.upload_from_string(content, content_type=mime_type)
             blob.make_public()
             preview_url = blob.public_url
         except Exception:
-            pass
+            preview_url = f"https://storage.googleapis.com/{DEFAULT_STORAGE_BUCKET}/{file_path}"
 
-    return {
-        'success': True,
-        'url': preview_url,
-        'bucket': 'firebase-storage',
-        'path': file_path
-    }
+        return {
+            'success': True,
+            'url': preview_url,
+            'bucket': DEFAULT_STORAGE_BUCKET,
+            'path': file_path
+        }
+    except Exception as e_upload:
+        logging.error(f"[FIREBASE STORAGE UPLOAD FAILURE] {e_upload}")
+        return {
+            'success': False,
+            'error': f"Firebase Storage upload failed: {str(e_upload)}",
+            'path': file_path
+        }
 
 upload_to_supabase_storage = upload_to_firebase_storage
 

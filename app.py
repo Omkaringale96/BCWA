@@ -712,9 +712,11 @@ def api_upload_document():
         size_kb = max(1, int(len(file_bytes) / 1024))
         file.seek(0)
         s_res = upload_to_supabase_storage(file, file_name, category=category, firm_id=shop_code)
-        if s_res.get('success'):
-            file_url = s_res.get('url')
-            storage_path = s_res.get('path', storage_path)
+        if not s_res.get('success'):
+            err_msg = s_res.get('error', 'Document upload failed. Could not write file object to Cloud Storage.')
+            return jsonify({'success': False, 'error': f"Document upload failed: {err_msg}. Please try again."}), 500
+        file_url = s_res.get('url')
+        storage_path = s_res.get('path', storage_path)
 
     doc_data = {
         'store_id': store_id,
