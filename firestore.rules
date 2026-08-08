@@ -14,6 +14,7 @@ service cloud.firestore {
         request.auth.token.role == 'Admin' ||
         request.auth.token.role == 'AssociationAdmin' ||
         request.auth.token.role == 'Staff' ||
+        request.auth.uid == 'admin_vin2821' ||
         request.auth.email == 'bhosalevinayakpsnl@gmail.com'
       );
     }
