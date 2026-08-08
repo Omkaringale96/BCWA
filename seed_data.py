@@ -59,14 +59,13 @@ def clear_production_database():
     init_db()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # 1. Reset 'users' table - Keep SuperAdmin Account (DATTA)
+    # 1. Reset 'users' table - Keep ONLY Administrator Account (VIN2821)
     admin_user = {
-        'id': 'DATTA',
-        'officer_id': 'DATTA',
-        'name': 'Datta',
-        'email': 'datta.admin@bcwa.org',
-        'password': generate_password_hash('555'),
-        'role': 'SuperAdmin',
+        'id': 'VIN2821',
+        'name': 'Vinayak',
+        'email': 'vin2821@bcwaportal.in',
+        'password': generate_password_hash('2821'),
+        'role': 'Administrator',
         'status': 'Active',
         'last_login': now_str,
         'created_at': now_str,
@@ -100,25 +99,19 @@ def clear_production_database():
         print(f"[SUPABASE PURGE NOTICE] {e}")
 
     # Wipe local store tables
-    try:
-        from database import _mock_storage
-        _mock_storage['medical_stores'] = []
-        _mock_storage['pharmacists'] = []
-        _mock_storage['documents'] = []
-        _mock_storage['notifications'] = []
-        _mock_storage['notification_queue'] = []
-        _mock_storage['notification_logs'] = []
-        _mock_storage['activity_logs'] = []
-        _mock_storage['store_accounts'] = []
-        _mock_storage['users'] = [admin_user]
-    except Exception:
-        pass
+    from supabase_client import _mock_storage
+    _mock_storage['medical_stores'] = []
+    _mock_storage['pharmacists'] = []
+    _mock_storage['documents'] = []
+    _mock_storage['notifications'] = []
+    _mock_storage['notification_queue'] = []
+    _mock_storage['notification_logs'] = []
+    _mock_storage['activity_logs'] = []
+    _mock_storage['store_accounts'] = []
+    _mock_storage['users'] = [admin_user]
 
     # Ensure admin user is inserted
-    try:
-        db_table('users').upsert(admin_user).execute()
-    except Exception:
-        pass
+    db_table('users').upsert(admin_user).execute()
 
     # 2. Clean up sample PDFs from static/docs/
     doc_folder = os.path.join(os.path.dirname(__file__), 'static', 'docs')

@@ -679,14 +679,11 @@ const BCWAApp = {
 
             tbody.innerHTML = storeItems.map(st => {
                 const badgeClass = st.compliance_score >= 90 ? 'badge-success' : (st.compliance_score >= 75 ? 'badge-info' : (st.compliance_score >= 50 ? 'badge-warning' : 'badge-danger'));
-                const numPart = (st.id || '').replace('MS-', '').replace('BCWA-', '');
-                const loginId = st.login_id || `BCWA-STORE-${numPart}`;
                 return `
                     <tr>
                         <td>
                             <div><strong>${st.store_name}</strong></div>
-                            <small class="text-secondary">Firm ID: <code>${st.shop_code}</code></small>
-                            <div><small style="color:#0D9488; font-weight:600;">Login ID: <code>${loginId}</code></small></div>
+                            <small class="text-secondary">Code: <code>${st.shop_code}</code></small>
                         </td>
                         <td>
                             <div>${st.owner_name}</div>
@@ -709,7 +706,6 @@ const BCWAApp = {
                         <td>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.openStoreProfile('${st.id}')">Profile</button>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.editStore('${st.id}')">Edit</button>
-                            <button class="btn btn-secondary btn-sm" style="color:#E11D48;" onclick="BCWAApp.resetStorePassword('${st.id}', '${st.shop_code}')">Reset Pass</button>
                             <button class="btn btn-danger btn-sm" onclick="BCWAApp.deleteStore('${st.id}')">Delete</button>
                         </td>
                     </tr>
@@ -1554,21 +1550,10 @@ const BCWAApp = {
                 const data = await res.json();
                 if (res.ok && data.success) {
                     closeModal('modal-store');
+                    alert(id ? 'Medical Store updated successfully!' : 'Medical Store registered successfully!');
                     await this.loadMedicalStores();
                     await this.loadDashboardStats();
                     if (typeof this.loadActivityLogs === 'function') await this.loadActivityLogs();
-
-                    if (data.login_id && data.temp_password) {
-                        this.showStoreCredentialsModal({
-                            store_name: payload.store_name,
-                            store_id: data.id || 'N/A',
-                            firm_id: data.firm_id || data.shop_code || 'N/A',
-                            login_id: data.login_id,
-                            temp_password: data.temp_password
-                        });
-                    } else {
-                        alert(id ? 'Medical Store updated successfully!' : 'Medical Store registered successfully!');
-                    }
                 } else {
                     const warnBox = document.getElementById('store-duplicate-warning');
                     if (warnBox) {
@@ -1583,74 +1568,6 @@ const BCWAApp = {
                 alert('Network or server error occurred during registration.');
             }
         });
-    },
-
-    showStoreCredentialsModal(creds) {
-        this.activeStoreCredentials = creds;
-        const nameEl = document.getElementById('cred-modal-store-name');
-        const idEl = document.getElementById('cred-modal-store-id');
-        const firmEl = document.getElementById('cred-modal-firm-id');
-        const loginEl = document.getElementById('cred-modal-login-id');
-        const passEl = document.getElementById('cred-modal-password');
-
-        if (nameEl) nameEl.textContent = creds.store_name || '-';
-        if (idEl) idEl.textContent = creds.store_id || '-';
-        if (firmEl) firmEl.textContent = creds.firm_id || '-';
-        if (loginEl) loginEl.textContent = creds.login_id || '-';
-        if (passEl) passEl.textContent = creds.temp_password || '-';
-
-        openModal('modal-store-credentials');
-        if (window.lucide) lucide.createIcons();
-    },
-
-    copyCredential(type) {
-        if (!this.activeStoreCredentials) return;
-        const text = type === 'login_id' ? this.activeStoreCredentials.login_id : this.activeStoreCredentials.temp_password;
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(text).then(() => {
-                alert((type === 'login_id' ? 'Store Login ID' : 'Password') + ' copied to clipboard!');
-            });
-        }
-    },
-
-    copyAllCredentialsAndClose() {
-        if (!this.activeStoreCredentials) { closeModal('modal-store-credentials'); return; }
-        const c = this.activeStoreCredentials;
-        const fullText = `Store Name: ${c.store_name}\nStore ID: ${c.store_id}\nFirm ID: ${c.firm_id}\nStore Login ID: ${c.login_id}\nTemp Password: ${c.temp_password}`;
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(fullText).then(() => {
-                alert('All Store Credentials copied to clipboard!');
-                closeModal('modal-store-credentials');
-            });
-        } else {
-            closeModal('modal-store-credentials');
-        }
-    },
-
-    async resetStorePassword(storeId, firmId) {
-        if (!confirm(`Are you sure you want to reset password for store ${firmId}?`)) return;
-        try {
-            const res = await fetch('/api/admin/reset-store-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ store_id: storeId, firm_id: firmId })
-            });
-            const data = await res.json();
-            if (res.ok && data.success) {
-                this.showStoreCredentialsModal({
-                    store_name: data.store_name || firmId,
-                    store_id: data.store_id || storeId,
-                    firm_id: data.firm_id || firmId,
-                    login_id: data.login_id,
-                    temp_password: data.new_password
-                });
-            } else {
-                alert(data.error || 'Failed to reset password');
-            }
-        } catch (e) {
-            alert('Error connecting to server for password reset');
-        }
-    }
 
         document.getElementById('form-pharmacist')?.addEventListener('submit', async (e) => {
             e.preventDefault();

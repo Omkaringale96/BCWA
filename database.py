@@ -93,54 +93,31 @@ def cache_clear():
     _CACHE.clear()
 
 def init_db():
-    """Initializes startup connection test and verifies primary admin users with hashed passwords"""
+    """Initializes startup connection test and verifies primary admin user with hashed password"""
     connected, msg = test_supabase_connection()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     try:
-        # Guarantee DATTA (SuperAdmin) exists in database
-        res_datta = db_table('users').select('*').eq('id', 'DATTA').execute()
-        if not res_datta.data:
-            datta_user = {
-                'id': 'DATTA',
-                'officer_id': 'DATTA',
-                'name': 'Datta',
-                'email': 'datta.admin@bcwa.org',
-                'password': generate_password_hash('555'),
-                'role': 'SuperAdmin',
-                'status': 'Active',
-                'last_login': now_str,
-                'created_at': now_str,
-                'updated_at': now_str
-            }
-            db_table('users').upsert(datta_user).execute()
-        else:
-            existing = res_datta.data[0]
-            stored_pw = existing.get('password', '')
-            if stored_pw and not check_password_hash(stored_pw, '555') and stored_pw != '555':
-                hashed = generate_password_hash('555')
-                db_table('users').update({'password': hashed, 'role': 'SuperAdmin', 'status': 'Active'}).eq('id', 'DATTA').execute()
-
-        # Guarantee VIN2821 (Administrator) exists in database
-        res_vin = db_table('users').select('*').eq('id', 'VIN2821').execute()
-        if not res_vin.data:
-            vin_user = {
+        res = db_table('users').select('*').eq('id', 'VIN2821').execute()
+        if not res.data:
+            admin_user = {
                 'id': 'VIN2821',
                 'name': 'Vinayak',
                 'email': 'vin2821@bcwaportal.in',
-                'password': generate_password_hash('555'),
+                'password': generate_password_hash('2821'),
                 'role': 'Administrator',
                 'status': 'Active',
                 'last_login': now_str,
                 'created_at': now_str,
                 'updated_at': now_str
             }
-            db_table('users').upsert(vin_user).execute()
+            db_table('users').upsert(admin_user).execute()
         else:
-            existing_vin = res_vin.data[0]
-            stored_pw_vin = existing_vin.get('password', '')
-            if stored_pw_vin and not check_password_hash(stored_pw_vin, '555') and stored_pw_vin != '555' and stored_pw_vin != '2821':
-                hashed = generate_password_hash('555')
-                db_table('users').update({'password': hashed, 'status': 'Active'}).eq('id', 'VIN2821').execute()
+            # Migrate plaintext passwords to hashed on startup
+            existing = res.data[0]
+            stored_pw = existing.get('password', '')
+            if stored_pw and not stored_pw.startswith(('pbkdf2:', 'scrypt:')):
+                hashed = generate_password_hash(stored_pw)
+                db_table('users').update({'password': hashed}).eq('id', 'VIN2821').execute()
     except Exception as e:
         print(f"[INIT DB WARNING] User verification deferred: {e}")
 
@@ -1031,54 +1008,43 @@ def save_user(data):
     return user_id
 
 def verify_admin_credentials(username, password):
-    """Verify admin/user credentials with hashed password support and fail-safe admin fallback."""
-    clean_user = (username or '').strip()
-    clean_pass = (password or '').strip()
-
-    if not clean_user or not clean_pass:
-        return None
-
+    """Verify admin/user credentials with hashed password support."""
     try:
-        # 1. Try uppercase ID match (DATTA, VIN2821)
-        res = db_table('users').select('*').eq('id', clean_user.upper()).execute()
+        res = db_table('users').select('*').eq('id', username.upper()).execute()
         if not res.data:
-            # 2. Try lowercase email match
-            res = db_table('users').select('*').eq('email', clean_user.lower()).execute()
+            res = db_table('users').select('*').eq('email', username.lower()).execute()
         if not res.data:
-            # 3. Try exact ID match
-            res = db_table('users').select('*').eq('id', clean_user).execute()
-        if not res.data:
-            # 4. Try case-insensitive officer_id match
-            try:
-                res = db_table('users').select('*').eq('officer_id', clean_user.upper()).execute()
-            except Exception:
-                pass
-
+            # Try case-insensitive ID match
+            res = db_table('users').select('*').eq('id', username).execute()
         if res.data:
             u = res.data[0]
-            if u.get('status') == 'Active':
-                stored_pw = u.get('password', '')
-                if stored_pw.startswith(('pbkdf2:', 'scrypt:')):
-                    if check_password_hash(stored_pw, clean_pass):
-                        return u
-                else:
-                    if stored_pw == clean_pass or clean_pass in ['555', '2821']:
-                        try:
-                            hashed = generate_password_hash(clean_pass)
-                            db_table('users').update({'password': hashed}).eq('id', u['id']).execute()
-                        except Exception:
-                            pass
-                        return u
+            if u.get('status') != 'Active':
+                return None
+            stored_pw = u.get('password', '')
+            # Support both hashed and plaintext (migration period)
+            if stored_pw.startswith(('pbkdf2:', 'scrypt:')):
+                if check_password_hash(stored_pw, password):
+                    return u
+            else:
+                # Plaintext comparison (legacy, auto-migrate)
+                if stored_pw == password:
+                    # Auto-migrate to hashed password
+                    try:
+                        hashed = generate_password_hash(password)
+                        db_table('users').update({'password': hashed}).eq('id', u['id']).execute()
+                    except Exception:
+                        pass
+                    return u
     except Exception as e:
         print(f"[VERIFY ADMIN CREDENTIALS WARNING] Database verification error: {e}")
 
-    # FAILSAFE FALLBACK FOR DATTA / 555 or ADMIN / 555
-    if clean_user.upper() in ["DATTA", "VIN2821", "ADMIN"] and clean_pass in ["555", "2821"]:
+    # FAILSAFE FALLBACK FOR VIN2821 / 2821
+    if (username or '').strip().upper() in ["VIN2821", "VINAYAK", "ADMIN"] and (password or '').strip() == "2821":
         return {
-            'id': 'DATTA',
-            'officer_id': 'DATTA',
-            'name': 'Datta',
-            'email': 'datta.admin@bcwa.org',
+            'id': 'VIN2821',
+            'officer_id': 'VIN2821',
+            'name': 'Vinayak',
+            'email': 'bhosalevinayakpsnl@gmail.com',
             'role': 'SuperAdmin',
             'status': 'Active'
         }
@@ -1138,73 +1104,38 @@ def change_store_password(firm_id, old_password, new_password):
 # MEDICAL STORE SELF-SERVICE PORTAL (FIRM ACCOUNTS & AUTHENTICATION)
 # -----------------------------------------------------------------------------
 
-def generate_secure_random_password(length=10):
-    """Generates a cryptographically secure random password (e.g. BCWA@7Kp4X9m2)."""
-    import secrets
-    import string
-    alphabet = string.ascii_letters + string.digits
-    rand_chars = ''.join(secrets.choice(alphabet) for _ in range(length - 5))
-    return f"BCWA@{rand_chars}"
-
 def get_store_account_by_firm_id(firm_id):
-    return get_store_account_by_identifier(firm_id)
-
-def get_store_account_by_identifier(identifier):
-    if not identifier:
-        return None
-    clean_id = str(identifier).strip().upper()
     try:
-        # Search by login_id
-        res = db_table('store_accounts').select('*').eq('login_id', clean_id).execute()
-        if res.data:
-            return res.data[0]
-        # Search by firm_id
-        res = db_table('store_accounts').select('*').eq('firm_id', clean_id).execute()
-        if res.data:
-            return res.data[0]
-        # Search by store_id
-        res = db_table('store_accounts').select('*').eq('store_id', clean_id).execute()
-        if res.data:
-            return res.data[0]
+        res = db_table('store_accounts').select('*').eq('firm_id', firm_id.strip().upper()).execute()
+        return res.data[0] if res.data else None
     except Exception:
-        pass
-    return None
+        return None
 
-def verify_store_credentials(identifier, password):
-    account = get_store_account_by_identifier(identifier)
+def verify_store_credentials(firm_id, password):
+    account = get_store_account_by_firm_id(firm_id)
     if not account:
         return None
     pwd_hash = account.get('password_hash', '')
     if check_password_hash(pwd_hash, password):
         return account
-    # Direct testing password fallback for MS-1037 / Pramod
-    if (identifier.upper() in ['PRAMOD', 'BCWA-STORE-1037', 'MS-1037'] or account.get('store_id') == 'MS-1037') and (password == '555' or password == '2821'):
-        return account
     return None
 
-def create_or_update_store_account(firm_id, password, store_id, owner_name, store_name, email, mobile, status='Active', login_id=None):
+def create_or_update_store_account(firm_id, password, store_id, owner_name, store_name, email, mobile, status='Active'):
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     pwd_hash = generate_password_hash(password)
-    
-    clean_store_id = store_id or f"MS-{abs(hash(firm_id)) % 9000 + 1000}"
-    num_part = clean_store_id.replace('MS-', '').replace('BCWA-', '')
-    computed_login_id = login_id or f"BCWA-STORE-{num_part}"
-
     record = {
-        'login_id': computed_login_id.strip().upper(),
         'firm_id': firm_id.strip().upper(),
         'password_hash': pwd_hash,
-        'store_id': clean_store_id,
+        'store_id': store_id,
         'owner_name': owner_name,
         'store_name': store_name,
         'email': email,
         'mobile': mobile,
-        'role': 'StoreOwner',
         'status': status,
         'updated_at': now_str
     }
     try:
-        existing = get_store_account_by_identifier(firm_id) or get_store_account_by_identifier(computed_login_id)
+        existing = get_store_account_by_firm_id(firm_id)
         if not existing:
             record['created_at'] = now_str
             db_table('store_accounts').insert(record).execute()

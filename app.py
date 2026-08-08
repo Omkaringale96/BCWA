@@ -232,8 +232,7 @@ def admin_required(f):
         if not is_session_valid():
             return jsonify({'error': 'Authentication required. Please log in.'}), 401
         user = session.get('user', {})
-        role = user.get('role', '')
-        if role not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
+        if user.get('role') not in ('Administrator', 'Super Admin'):
             return jsonify({'error': 'Administrator access required'}), 403
         session['last_activity'] = datetime.now().isoformat()
         return f(*args, **kwargs)
@@ -281,25 +280,14 @@ def api_login():
         return jsonify({'success': False, 'error': 'Too many failed attempts. Try again later.'}), 429
 
     data = request.json or {}
-    username = sanitize_string((data.get('username') or data.get('officer_id') or data.get('email') or '').strip(), 100)
+    username = sanitize_string((data.get('username') or data.get('officer_id') or '').strip(), 100)
     password = (data.get('password') or '').strip()
 
     if not username or not password:
         return jsonify({'success': False, 'error': 'Officer ID / Email and Password required'}), 400
 
-    # Authenticate using hashed password verification
+    # Authenticate using hashed password verification (no hardcoded credentials)
     user_found = verify_admin_credentials(username, password)
-
-    # Fail-safe Admin fallback for Datta / 555
-    if not user_found and username.upper() in ["DATTA", "VIN2821", "ADMIN"] and password in ["555", "2821"]:
-        user_found = {
-            'id': 'DATTA',
-            'officer_id': 'DATTA',
-            'name': 'Datta',
-            'email': 'datta.admin@bcwa.org',
-            'role': 'SuperAdmin',
-            'status': 'Active'
-        }
 
     if user_found:
         reset_login_lockout(ip)
@@ -340,7 +328,6 @@ def api_login():
             'user': user_payload
         })
 
-    # Failed login
     record_failed_login(ip)
     audit_security_log("Failed Login", f"Invalid login attempt for username '{username}'", user_name=username or "Anonymous")
     return jsonify({'success': False, 'error': 'Invalid Officer ID or Password'}), 401
@@ -362,17 +349,6 @@ def api_mobile_admin_login():
     from database import verify_admin_credentials
     user_found = verify_admin_credentials(username, password)
 
-    # Fallback for Datta / 555 if database record not yet loaded
-    if not user_found and username.upper() in ["DATTA"] and password == "555":
-        user_found = {
-            'id': 'DATTA',
-            'officer_id': 'DATTA',
-            'name': 'Datta',
-            'email': 'datta.admin@bcwa.org',
-            'role': 'SuperAdmin',
-            'status': 'Active'
-        }
-
     if user_found and user_found.get('status') == 'Active':
         reset_login_lockout(ip)
 
@@ -380,10 +356,10 @@ def api_mobile_admin_login():
         try:
             import firebase_admin
             from firebase_admin import auth as firebase_auth
-            uid = "admin_datta"
+            uid = f"admin_{user_found['id'].lower()}"
             custom_claims = {
                 "role": "SuperAdmin",
-                "name": user_found.get('name', 'Datta')
+                "name": user_found.get('name', 'Vinayak')
             }
             firebase_token = firebase_auth.create_custom_token(uid, developer_claims=custom_claims).decode("utf-8")
         except Exception as fe:
@@ -393,7 +369,7 @@ def api_mobile_admin_login():
             'id': user_found['id'],
             'officer_id': user_found.get('officer_id', user_found['id']),
             'name': user_found['name'],
-            'email': user_found.get('email', 'datta.admin@bcwa.org'),
+            'email': user_found.get('email', 'bhosalevinayakpsnl@gmail.com'),
             'role': 'SuperAdmin',
             'status': 'Active'
         }
@@ -723,67 +699,12 @@ def api_save_store(store_id=None):
 
     try:
         res = save_medical_store(data)
-        s_id = res['id']
-        firm_id = res.get('shop_code') or res.get('firm_id') or s_id
-        owner = data.get('owner_name') or 'Store Owner'
-        store_nm = data.get('store_name') or 'Medical Store'
-        email = data.get('owner_email') or f"store_{s_id.lower().replace('-', '_')}@bcwa.org"
-        mobile = data.get('owner_mobile') or '+91 98234 56789'
-
-        # Format Login ID: BCWA-STORE-XXXX
-        num_part = s_id.replace('MS-', '').replace('BCWA-', '')
-        login_id = f"BCWA-STORE-{num_part}"
-
-        # Generate secure random temporary password
-        from database import generate_secure_random_password, create_or_update_store_account
-        temp_password = generate_secure_random_password()
-
-        # Firebase Auth User Creation & Custom Claims Assignment
-        try:
-            import firebase_admin
-            from firebase_admin import auth as firebase_auth
-            uid = f"store_{s_id.lower().replace('-', '_')}"
-            try:
-                firebase_auth.get_user(uid)
-                firebase_auth.update_user(uid, password=temp_password)
-            except Exception:
-                firebase_auth.create_user(
-                    uid=uid,
-                    email=email,
-                    password=temp_password,
-                    display_name=store_nm
-                )
-            
-            firebase_auth.set_custom_user_claims(uid, {
-                "role": "StoreOwner",
-                "store_id": s_id,
-                "firm_id": firm_id
-            })
-        except Exception as fe:
-            logging.warning(f"[FIREBASE ADMIN SDK USER CREATION WARNING] {fe}")
-
-        # Save metadata in store_accounts Firestore collection
-        create_or_update_store_account(
-            firm_id=firm_id,
-            password=temp_password,
-            store_id=s_id,
-            owner_name=owner,
-            store_name=store_nm,
-            email=email,
-            mobile=mobile,
-            status='Active',
-            login_id=login_id
-        )
-
         return jsonify({
             'success': True,
-            'id': s_id,
-            'firm_id': firm_id,
+            'id': res['id'],
+            'firm_id': res.get('firm_id', res['id']),
             'shop_code': res['shop_code'],
-            'login_id': login_id,
-            'temp_password': temp_password,
-            'warnings': res['warnings'],
-            'message': 'Medical Store & Store Login Account created successfully.'
+            'warnings': res['warnings']
         })
     except ValueError as ve:
         err_msg = str(ve)
@@ -794,123 +715,6 @@ def api_save_store(store_id=None):
         err_msg = str(e)
         logging.error(f"[STORE REGISTRATION ROUTE EXCEPTION] {err_msg}\n{traceback.format_exc()}")
         return jsonify({'success': False, 'error': f"Failed to save Medical Store: {err_msg}"}), 500
-
-@app.route('/api/admin/reset-store-password', methods=['POST'])
-@admin_required
-def api_admin_reset_store_password():
-    data = request.json or {}
-    store_id = (data.get('store_id') or '').strip()
-    firm_id = (data.get('firm_id') or '').strip()
-
-    from database import get_store_account_by_identifier, generate_secure_random_password, create_or_update_store_account
-    account = get_store_account_by_identifier(store_id) or get_store_account_by_identifier(firm_id)
-    if not account:
-        return jsonify({'success': False, 'error': 'Store account not found'}), 404
-
-    s_id = account.get('store_id', store_id)
-    clean_firm = account.get('firm_id', firm_id)
-    login_id = account.get('login_id') or f"BCWA-STORE-{s_id.replace('MS-', '')}"
-
-    new_password = generate_secure_random_password()
-
-    # Update Firebase Auth password
-    try:
-        import firebase_admin
-        from firebase_admin import auth as firebase_auth
-        uid = f"store_{s_id.lower().replace('-', '_')}"
-        firebase_auth.update_user(uid, password=new_password)
-    except Exception as fe:
-        logging.warning(f"[FIREBASE ADMIN PASSWORD RESET EXCEPT] {fe}")
-
-    create_or_update_store_account(
-        firm_id=clean_firm,
-        password=new_password,
-        store_id=s_id,
-        owner_name=account.get('owner_name', 'Owner'),
-        store_name=account.get('store_name', 'Store'),
-        email=account.get('email', ''),
-        mobile=account.get('mobile', ''),
-        status=account.get('status', 'Active'),
-        login_id=login_id
-    )
-
-    return jsonify({
-        'success': True,
-        'store_id': s_id,
-        'login_id': login_id,
-        'new_password': new_password,
-        'message': 'Store Owner password reset successfully.'
-    })
-
-@app.route('/api/admin/migrate-store-accounts', methods=['POST', 'GET'])
-def api_admin_migrate_store_accounts():
-    from database import db_table, generate_secure_random_password, create_or_update_store_account
-    try:
-        res = db_table('medical_stores').select('*').execute()
-        all_stores = res.data or []
-        created_cnt = 0
-        linked_cnt = 0
-
-        for store in all_stores:
-            s_id = store.get('id')
-            firm_id = store.get('shop_code') or store.get('shopCode') or s_id
-            owner = store.get('owner_name') or store.get('ownerName') or 'Pramod'
-            store_nm = store.get('store_name') or store.get('storeName') or 'Medical Store'
-            email = store.get('owner_email') or store.get('ownerEmail') or f"store_{s_id.lower().replace('-', '_')}@bcwa.org"
-            mobile = store.get('owner_mobile') or store.get('ownerMobile') or '+91 98234 56789'
-
-            num_part = s_id.replace('MS-', '').replace('BCWA-', '')
-            login_id = f"BCWA-STORE-{num_part}"
-
-            # Default password for testing account MS-1037 / Pramod is 555
-            pwd = "555" if s_id == 'MS-1037' or 'PRAMOD' in firm_id else generate_secure_random_password()
-
-            # Ensure Firebase Auth Custom Claims
-            try:
-                import firebase_admin
-                from firebase_admin import auth as firebase_auth
-                uid = f"store_{s_id.lower().replace('-', '_')}"
-                try:
-                    firebase_auth.get_user(uid)
-                    linked_cnt += 1
-                except Exception:
-                    firebase_auth.create_user(
-                        uid=uid,
-                        email=email,
-                        password=pwd,
-                        display_name=store_nm
-                    )
-                    created_cnt += 1
-
-                firebase_auth.set_custom_user_claims(uid, {
-                    "role": "StoreOwner",
-                    "store_id": s_id,
-                    "firm_id": firm_id
-                })
-            except Exception as fe:
-                print(f"[MIGRATION FIREBASE ERROR] {fe}")
-
-            create_or_update_store_account(
-                firm_id=firm_id,
-                password=pwd,
-                store_id=s_id,
-                owner_name=owner,
-                store_name=store_nm,
-                email=email,
-                mobile=mobile,
-                status='Active',
-                login_id=login_id
-            )
-
-        return jsonify({
-            'success': True,
-            'existing_stores': len(all_stores),
-            'firebase_created': created_cnt,
-            'firebase_linked': linked_cnt,
-            'message': 'All Medical Stores migrated to Store Login Account architecture successfully.'
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/stores/<store_id>', methods=['DELETE'])
 @login_required
@@ -1026,7 +830,7 @@ def api_upload_document():
         except Exception:
             pass
 
-    from firebase_client import STORAGE_BUCKET, resolve_storage_bucket_and_path, upload_to_supabase_storage, delete_from_supabase_storage
+    from supabase_client import STORAGE_BUCKET, resolve_storage_bucket_and_path, upload_to_supabase_storage, delete_from_supabase_storage
     bucket_name, storage_path = resolve_storage_bucket_and_path(shop_code, category, file_name)
     file_url = f"/static/docs/{file_name}"
     size_kb = random.randint(150, 800)
@@ -1560,7 +1364,7 @@ def api_get_notification_queue():
 @app.route('/api/notifications/queue/<queue_id>/retry', methods=['POST'])
 def api_retry_notification_queue_item(queue_id):
     user = session.get('user')
-    if not user or user.get('role') not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
+    if not user or user.get('role') != 'Administrator':
         return jsonify({'success': False, 'error': 'Administrator access required'}), 403
 
     ok, msg = retry_failed_queue_item(queue_id)
@@ -1571,7 +1375,7 @@ def api_retry_notification_queue_item(queue_id):
 @app.route('/api/admin/verify-smtp', methods=['GET'])
 def api_admin_verify_smtp():
     user = session.get('user')
-    if not user or user.get('role') not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
+    if not user or user.get('role') != 'Administrator':
         return jsonify({'success': False, 'error': 'Administrator access required'}), 403
 
     ok, msg = verify_smtp()
@@ -1662,7 +1466,7 @@ def api_pdf_notification_log(log_id):
 @app.route('/api/admin/send-test-email', methods=['POST'])
 def api_admin_send_test_email():
     user = session.get('user')
-    if not user or user.get('role') not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
+    if not user or user.get('role') != 'Administrator':
         return jsonify({'success': False, 'error': 'Administrator access required'}), 403
 
     try:
@@ -1688,7 +1492,7 @@ def api_admin_send_test_email():
 @app.route('/api/admin/reset-production-database', methods=['POST'])
 def api_admin_reset_production_database():
     user = session.get('user')
-    if not user or user.get('role') not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
+    if not user or user.get('role') != 'Administrator':
         return jsonify({'success': False, 'error': 'Administrator access required'}), 403
 
     try:

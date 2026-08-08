@@ -13,7 +13,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         reset_login_lockout('127.0.0.1')
 
     def login_admin(self):
-        return self.app.post('/api/auth/login', json={'username': 'Datta', 'password': '555'})
+        return self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
 
     def test_00_unauthorized_access_blocked(self):
         """Verify that protected API endpoints return 401 when accessed without logging in."""
@@ -59,7 +59,7 @@ class BCWAPortalTestCase(unittest.TestCase):
 
         with self.app as c:
             # 0. Login as Admin
-            c.post('/api/auth/login', json={'username': 'Datta', 'password': '555'})
+            c.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
 
             # 1. Register a new Medical Store
             store_payload = {
@@ -172,7 +172,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         for _ in range(5):
             self.app.post('/api/auth/login', json={'username': 'INVALID', 'password': 'WRONG'})
         
-        res = self.app.post('/api/auth/login', json={'username': 'Datta', 'password': '555'})
+        res = self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
         self.assertEqual(res.status_code, 429)
         data = res.get_json()
         self.assertIn('Too many failed attempts', data.get('error', ''))
@@ -182,7 +182,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         from app import reset_login_lockout
         reset_login_lockout('127.0.0.1')
 
-        res = self.app.post('/api/auth/login', json={'username': 'Datta', 'password': '555'})
+        res = self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
         self.assertEqual(res.status_code, 200)
 
         res_sess = self.app.get('/api/auth/session')
@@ -201,7 +201,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         import app as app_module
         reset_login_lockout('127.0.0.1')
 
-        self.app.post('/api/auth/login', json={'username': 'Datta', 'password': '555'})
+        self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
         res1 = self.app.get('/api/auth/session')
         self.assertEqual(res1.status_code, 200)
 
@@ -237,7 +237,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         from app import reset_login_lockout
         reset_login_lockout('127.0.0.1')
         
-        self.app.post('/api/auth/login', json={'username': 'Datta', 'password': '555'})
+        self.app.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
         res = self.app.post('/api/admin/send-test-email')
         self.assertIn(res.status_code, [200, 500])
         data = res.get_json()
@@ -271,7 +271,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         clear_production_database()
 
         with self.app as c:
-            c.post('/api/auth/login', json={'username': 'Datta', 'password': '555'})
+            c.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
             # Submit invalid store payload missing store_name
             res = c.post('/api/stores', json={'owner_name': 'Test Owner'})
             self.assertEqual(res.status_code, 400)
@@ -293,7 +293,7 @@ class BCWAPortalTestCase(unittest.TestCase):
         clear_production_database()
 
         with self.app as c:
-            c.post('/api/auth/login', json={'username': 'Datta', 'password': '555'})
+            c.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
 
             # 1. Register Medical Store with Drug License expiry set to yesterday (-1 day)
             yesterday_str = (datetime.now().date() - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -356,7 +356,7 @@ class BCWAPortalTestCase(unittest.TestCase):
     def test_document_upload_and_preview_workflow(self):
         import io
         with self.app as c:
-            c.post('/api/auth/login', json={'username': 'Datta', 'password': '555'})
+            c.post('/api/auth/login', json={'username': 'VIN2821', 'password': '2821'})
             
             # 1. Upload sample PDF document
             data = {

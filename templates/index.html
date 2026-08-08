@@ -993,62 +993,6 @@
         </div>
     </div>
 
-    <!-- STORE CREDENTIAL SUCCESS MODAL -->
-    <div class="modal-overlay" id="modal-store-credentials">
-        <div class="modal-content" style="max-width: 520px;">
-            <div class="modal-header" style="background-color: #F0FDF4; border-bottom: 1px solid #BBF7D0;">
-                <h3 style="color: #166534; display: flex; align-items: center; gap: 8px;">
-                    <i data-lucide="check-circle" style="color: #16A34A; width: 24px; height: 24px;"></i>
-                    Medical Store Account Created!
-                </h3>
-                <button class="btn-close" onclick="closeModal('modal-store-credentials')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p class="text-secondary" style="font-size: 13px; margin-bottom: 15px;">
-                    Automatic Store Login Account generated successfully for both <strong>Web Portal</strong> and <strong>Mobile App</strong>.
-                </p>
-
-                <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; margin-bottom: 15px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span class="text-secondary" style="font-size: 12px;">Store Name:</span>
-                        <strong id="cred-modal-store-name" style="color: #0F172A; font-size: 13px;">-</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span class="text-secondary" style="font-size: 12px;">Store ID:</span>
-                        <strong id="cred-modal-store-id" style="color: #0F172A; font-size: 13px;">-</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                        <span class="text-secondary" style="font-size: 12px;">Firm ID:</span>
-                        <strong id="cred-modal-firm-id" style="color: #0F172A; font-size: 13px;">-</strong>
-                    </div>
-                    <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 10px 0;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-weight: 600; font-size: 13px; color: #0D9488;">Store Login ID:</span>
-                        <code id="cred-modal-login-id" style="font-size: 14px; font-weight: 700; color: #0F172A; background: #E2E8F0; padding: 3px 8px; border-radius: 6px;">-</code>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 600; font-size: 13px; color: #E11D48;">Temp Password:</span>
-                        <strong id="cred-modal-password" style="font-size: 15px; font-weight: 700; color: #E11D48; letter-spacing: 0.5px;">-</strong>
-                    </div>
-                </div>
-
-                <div style="display: flex; gap: 10px;">
-                    <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="BCWAApp.copyCredential('login_id')">
-                        <i data-lucide="copy" style="width:14px; height:14px;"></i> Copy ID
-                    </button>
-                    <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="BCWAApp.copyCredential('password')">
-                        <i data-lucide="key" style="width:14px; height:14px;"></i> Copy Pass
-                    </button>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary" style="width: 100%;" onclick="BCWAApp.copyAllCredentialsAndClose()">
-                    <i data-lucide="clipboard-check"></i> Copy All &amp; Close
-                </button>
-            </div>
-        </div>
-    </div>
-
     <div class="modal-overlay" id="modal-ocr">
         <div class="modal-content">
             <div class="modal-header">
