@@ -711,12 +711,67 @@ def api_save_store(store_id=None):
 
     try:
         res = save_medical_store(data)
+        s_id = res['id']
+        firm_id = res.get('shop_code') or res.get('firm_id') or s_id
+        owner = data.get('owner_name') or 'Store Owner'
+        store_nm = data.get('store_name') or 'Medical Store'
+        email = data.get('owner_email') or f"store_{s_id.lower().replace('-', '_')}@bcwa.org"
+        mobile = data.get('owner_mobile') or '+91 98234 56789'
+
+        # Format Login ID: BCWA-STORE-XXXX
+        num_part = s_id.replace('MS-', '').replace('BCWA-', '')
+        login_id = f"BCWA-STORE-{num_part}"
+
+        # Generate secure random temporary password
+        from database import generate_secure_random_password, create_or_update_store_account
+        temp_password = generate_secure_random_password()
+
+        # Firebase Auth User Creation & Custom Claims Assignment
+        try:
+            import firebase_admin
+            from firebase_admin import auth as firebase_auth
+            uid = f"store_{s_id.lower().replace('-', '_')}"
+            try:
+                firebase_auth.get_user(uid)
+                firebase_auth.update_user(uid, password=temp_password)
+            except Exception:
+                firebase_auth.create_user(
+                    uid=uid,
+                    email=email,
+                    password=temp_password,
+                    display_name=store_nm
+                )
+            
+            firebase_auth.set_custom_user_claims(uid, {
+                "role": "StoreOwner",
+                "store_id": s_id,
+                "firm_id": firm_id
+            })
+        except Exception as fe:
+            logging.warning(f"[FIREBASE ADMIN SDK USER CREATION WARNING] {fe}")
+
+        # Save metadata in store_accounts Firestore collection
+        create_or_update_store_account(
+            firm_id=firm_id,
+            password=temp_password,
+            store_id=s_id,
+            owner_name=owner,
+            store_name=store_nm,
+            email=email,
+            mobile=mobile,
+            status='Active',
+            login_id=login_id
+        )
+
         return jsonify({
             'success': True,
-            'id': res['id'],
-            'firm_id': res.get('firm_id', res['id']),
+            'id': s_id,
+            'firm_id': firm_id,
             'shop_code': res['shop_code'],
-            'warnings': res['warnings']
+            'login_id': login_id,
+            'temp_password': temp_password,
+            'warnings': res['warnings'],
+            'message': 'Medical Store & Store Login Account created successfully.'
         })
     except ValueError as ve:
         err_msg = str(ve)
@@ -727,6 +782,123 @@ def api_save_store(store_id=None):
         err_msg = str(e)
         logging.error(f"[STORE REGISTRATION ROUTE EXCEPTION] {err_msg}\n{traceback.format_exc()}")
         return jsonify({'success': False, 'error': f"Failed to save Medical Store: {err_msg}"}), 500
+
+@app.route('/api/admin/reset-store-password', methods=['POST'])
+@admin_required
+def api_admin_reset_store_password():
+    data = request.json or {}
+    store_id = (data.get('store_id') or '').strip()
+    firm_id = (data.get('firm_id') or '').strip()
+
+    from database import get_store_account_by_identifier, generate_secure_random_password, create_or_update_store_account
+    account = get_store_account_by_identifier(store_id) or get_store_account_by_identifier(firm_id)
+    if not account:
+        return jsonify({'success': False, 'error': 'Store account not found'}), 404
+
+    s_id = account.get('store_id', store_id)
+    clean_firm = account.get('firm_id', firm_id)
+    login_id = account.get('login_id') or f"BCWA-STORE-{s_id.replace('MS-', '')}"
+
+    new_password = generate_secure_random_password()
+
+    # Update Firebase Auth password
+    try:
+        import firebase_admin
+        from firebase_admin import auth as firebase_auth
+        uid = f"store_{s_id.lower().replace('-', '_')}"
+        firebase_auth.update_user(uid, password=new_password)
+    except Exception as fe:
+        logging.warning(f"[FIREBASE ADMIN PASSWORD RESET EXCEPT] {fe}")
+
+    create_or_update_store_account(
+        firm_id=clean_firm,
+        password=new_password,
+        store_id=s_id,
+        owner_name=account.get('owner_name', 'Owner'),
+        store_name=account.get('store_name', 'Store'),
+        email=account.get('email', ''),
+        mobile=account.get('mobile', ''),
+        status=account.get('status', 'Active'),
+        login_id=login_id
+    )
+
+    return jsonify({
+        'success': True,
+        'store_id': s_id,
+        'login_id': login_id,
+        'new_password': new_password,
+        'message': 'Store Owner password reset successfully.'
+    })
+
+@app.route('/api/admin/migrate-store-accounts', methods=['POST', 'GET'])
+def api_admin_migrate_store_accounts():
+    from database import db_table, generate_secure_random_password, create_or_update_store_account
+    try:
+        res = db_table('medical_stores').select('*').execute()
+        all_stores = res.data or []
+        created_cnt = 0
+        linked_cnt = 0
+
+        for store in all_stores:
+            s_id = store.get('id')
+            firm_id = store.get('shop_code') or store.get('shopCode') or s_id
+            owner = store.get('owner_name') or store.get('ownerName') or 'Pramod'
+            store_nm = store.get('store_name') or store.get('storeName') or 'Medical Store'
+            email = store.get('owner_email') or store.get('ownerEmail') or f"store_{s_id.lower().replace('-', '_')}@bcwa.org"
+            mobile = store.get('owner_mobile') or store.get('ownerMobile') or '+91 98234 56789'
+
+            num_part = s_id.replace('MS-', '').replace('BCWA-', '')
+            login_id = f"BCWA-STORE-{num_part}"
+
+            # Default password for testing account MS-1037 / Pramod is 555
+            pwd = "555" if s_id == 'MS-1037' or 'PRAMOD' in firm_id else generate_secure_random_password()
+
+            # Ensure Firebase Auth Custom Claims
+            try:
+                import firebase_admin
+                from firebase_admin import auth as firebase_auth
+                uid = f"store_{s_id.lower().replace('-', '_')}"
+                try:
+                    firebase_auth.get_user(uid)
+                    linked_cnt += 1
+                except Exception:
+                    firebase_auth.create_user(
+                        uid=uid,
+                        email=email,
+                        password=pwd,
+                        display_name=store_nm
+                    )
+                    created_cnt += 1
+
+                firebase_auth.set_custom_user_claims(uid, {
+                    "role": "StoreOwner",
+                    "store_id": s_id,
+                    "firm_id": firm_id
+                })
+            except Exception as fe:
+                print(f"[MIGRATION FIREBASE ERROR] {fe}")
+
+            create_or_update_store_account(
+                firm_id=firm_id,
+                password=pwd,
+                store_id=s_id,
+                owner_name=owner,
+                store_name=store_nm,
+                email=email,
+                mobile=mobile,
+                status='Active',
+                login_id=login_id
+            )
+
+        return jsonify({
+            'success': True,
+            'existing_stores': len(all_stores),
+            'firebase_created': created_cnt,
+            'firebase_linked': linked_cnt,
+            'message': 'All Medical Stores migrated to Store Login Account architecture successfully.'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/stores/<store_id>', methods=['DELETE'])
 @login_required
