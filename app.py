@@ -232,7 +232,8 @@ def admin_required(f):
         if not is_session_valid():
             return jsonify({'error': 'Authentication required. Please log in.'}), 401
         user = session.get('user', {})
-        if user.get('role') not in ('Administrator', 'Super Admin'):
+        role = user.get('role', '')
+        if role not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
             return jsonify({'error': 'Administrator access required'}), 403
         session['last_activity'] = datetime.now().isoformat()
         return f(*args, **kwargs)
@@ -1559,7 +1560,7 @@ def api_get_notification_queue():
 @app.route('/api/notifications/queue/<queue_id>/retry', methods=['POST'])
 def api_retry_notification_queue_item(queue_id):
     user = session.get('user')
-    if not user or user.get('role') != 'Administrator':
+    if not user or user.get('role') not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
         return jsonify({'success': False, 'error': 'Administrator access required'}), 403
 
     ok, msg = retry_failed_queue_item(queue_id)
@@ -1570,7 +1571,7 @@ def api_retry_notification_queue_item(queue_id):
 @app.route('/api/admin/verify-smtp', methods=['GET'])
 def api_admin_verify_smtp():
     user = session.get('user')
-    if not user or user.get('role') != 'Administrator':
+    if not user or user.get('role') not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
         return jsonify({'success': False, 'error': 'Administrator access required'}), 403
 
     ok, msg = verify_smtp()
@@ -1661,7 +1662,7 @@ def api_pdf_notification_log(log_id):
 @app.route('/api/admin/send-test-email', methods=['POST'])
 def api_admin_send_test_email():
     user = session.get('user')
-    if not user or user.get('role') != 'Administrator':
+    if not user or user.get('role') not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
         return jsonify({'success': False, 'error': 'Administrator access required'}), 403
 
     try:
@@ -1687,7 +1688,7 @@ def api_admin_send_test_email():
 @app.route('/api/admin/reset-production-database', methods=['POST'])
 def api_admin_reset_production_database():
     user = session.get('user')
-    if not user or user.get('role') != 'Administrator':
+    if not user or user.get('role') not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
         return jsonify({'success': False, 'error': 'Administrator access required'}), 403
 
     try:
