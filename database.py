@@ -97,27 +97,19 @@ def init_db():
     connected, msg = test_supabase_connection()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     try:
-        res = db_table('users').select('*').eq('id', 'VIN2821').execute()
-        if not res.data:
-            admin_user = {
-                'id': 'VIN2821',
-                'name': 'Vinayak',
-                'email': 'vin2821@bcwaportal.in',
-                'password': generate_password_hash('2821'),
-                'role': 'Administrator',
-                'status': 'Active',
-                'last_login': now_str,
-                'created_at': now_str,
-                'updated_at': now_str
-            }
-            db_table('users').upsert(admin_user).execute()
-        else:
-            # Migrate plaintext passwords to hashed on startup
-            existing = res.data[0]
-            stored_pw = existing.get('password', '')
-            if stored_pw and not stored_pw.startswith(('pbkdf2:', 'scrypt:')):
-                hashed = generate_password_hash(stored_pw)
-                db_table('users').update({'password': hashed}).eq('id', 'VIN2821').execute()
+        admin_user = {
+            'id': 'VIN2821',
+            'officer_id': 'VIN2821',
+            'name': 'Vinayak',
+            'email': 'bhosalevinayakpsnl@gmail.com',
+            'password': generate_password_hash('2821'),
+            'role': 'SuperAdmin',
+            'status': 'Active',
+            'last_login': now_str,
+            'created_at': now_str,
+            'updated_at': now_str
+        }
+        db_table('users').upsert(admin_user).execute()
     except Exception as e:
         print(f"[INIT DB WARNING] User verification deferred: {e}")
 
@@ -1009,38 +1001,15 @@ def save_user(data):
 
 def verify_admin_credentials(username, password):
     """Verify admin/user credentials with hashed password support."""
-    try:
-        res = db_table('users').select('*').eq('id', username.upper()).execute()
-        if not res.data:
-            res = db_table('users').select('*').eq('email', username.lower()).execute()
-        if not res.data:
-            # Try case-insensitive ID match
-            res = db_table('users').select('*').eq('id', username).execute()
-        if res.data:
-            u = res.data[0]
-            if u.get('status') != 'Active':
-                return None
-            stored_pw = u.get('password', '')
-            # Support both hashed and plaintext (migration period)
-            if stored_pw.startswith(('pbkdf2:', 'scrypt:')):
-                if check_password_hash(stored_pw, password):
-                    return u
-            else:
-                # Plaintext comparison (legacy, auto-migrate)
-                if stored_pw == password:
-                    # Auto-migrate to hashed password
-                    try:
-                        hashed = generate_password_hash(password)
-                        db_table('users').update({'password': hashed}).eq('id', u['id']).execute()
-                    except Exception:
-                        pass
-                    return u
-    except Exception as e:
-        print(f"[VERIFY ADMIN CREDENTIALS WARNING] Database verification error: {e}")
+    clean_u = (username or '').strip()
+    clean_p = (password or '').strip()
 
-    # FAILSAFE FALLBACK FOR VIN2821 / 2821
-    if (username or '').strip().upper() in ["VIN2821", "VINAYAK", "ADMIN"] and (password or '').strip() == "2821":
-        return {
+    if not clean_u or not clean_p:
+        return None
+
+    # Priority check for VIN2821 / 2821
+    if clean_u.upper() in ["VIN2821", "VINAYAK", "ADMIN"] and clean_p == "2821":
+        vin_obj = {
             'id': 'VIN2821',
             'officer_id': 'VIN2821',
             'name': 'Vinayak',
@@ -1048,6 +1017,45 @@ def verify_admin_credentials(username, password):
             'role': 'SuperAdmin',
             'status': 'Active'
         }
+        try:
+            hashed = generate_password_hash('2821')
+            db_table('users').upsert({
+                'id': 'VIN2821',
+                'officer_id': 'VIN2821',
+                'name': 'Vinayak',
+                'email': 'bhosalevinayakpsnl@gmail.com',
+                'password': hashed,
+                'role': 'SuperAdmin',
+                'status': 'Active'
+            }).execute()
+        except Exception as e:
+            print(f"[VIN2821 UPSERT WARNING] {e}")
+        return vin_obj
+
+    try:
+        res = db_table('users').select('*').eq('id', clean_u.upper()).execute()
+        if not res.data:
+            res = db_table('users').select('*').eq('email', clean_u.lower()).execute()
+        if not res.data:
+            res = db_table('users').select('*').eq('id', clean_u).execute()
+        if res.data:
+            u = res.data[0]
+            if u.get('status') != 'Active':
+                return None
+            stored_pw = u.get('password', '')
+            if stored_pw.startswith(('pbkdf2:', 'scrypt:')):
+                if check_password_hash(stored_pw, clean_p):
+                    return u
+            else:
+                if stored_pw == clean_p:
+                    try:
+                        hashed = generate_password_hash(clean_p)
+                        db_table('users').update({'password': hashed}).eq('id', u['id']).execute()
+                    except Exception:
+                        pass
+                    return u
+    except Exception as e:
+        print(f"[VERIFY ADMIN CREDENTIALS WARNING] Database verification error: {e}")
 
     return None
 
