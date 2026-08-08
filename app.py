@@ -232,7 +232,8 @@ def admin_required(f):
         if not is_session_valid():
             return jsonify({'error': 'Authentication required. Please log in.'}), 401
         user = session.get('user', {})
-        if user.get('role') not in ('Administrator', 'Super Admin'):
+        role = user.get('role', '')
+        if role not in ('Administrator', 'SuperAdmin', 'Super Admin', 'AssociationAdmin', 'Officer', 'Staff'):
             return jsonify({'error': 'Administrator access required'}), 403
         session['last_activity'] = datetime.now().isoformat()
         return f(*args, **kwargs)

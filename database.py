@@ -103,7 +103,7 @@ def init_db():
             'name': 'Vinayak',
             'email': 'bhosalevinayakpsnl@gmail.com',
             'password': generate_password_hash('2821'),
-            'role': 'SuperAdmin',
+            'role': 'Administrator',
             'status': 'Active',
             'last_login': now_str,
             'created_at': now_str,
@@ -1014,7 +1014,7 @@ def verify_admin_credentials(username, password):
             'officer_id': 'VIN2821',
             'name': 'Vinayak',
             'email': 'bhosalevinayakpsnl@gmail.com',
-            'role': 'SuperAdmin',
+            'role': 'Administrator',
             'status': 'Active'
         }
         try:
@@ -1025,7 +1025,7 @@ def verify_admin_credentials(username, password):
                 'name': 'Vinayak',
                 'email': 'bhosalevinayakpsnl@gmail.com',
                 'password': hashed,
-                'role': 'SuperAdmin',
+                'role': 'Administrator',
                 'status': 'Active'
             }).execute()
         except Exception as e:
