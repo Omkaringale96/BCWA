@@ -4,6 +4,7 @@ import os
 import io
 import re
 import json
+import time
 import random
 import logging
 from functools import wraps
@@ -20,7 +21,7 @@ from database import (
     verify_admin_credentials, change_user_password, change_store_password
 )
 from seed_data import generate_seed_data
-from supabase_client import upload_to_supabase_storage, test_supabase_connection, db_table, generate_document_preview_url, DEFAULT_STORAGE_BUCKET
+from firebase_client import upload_to_firebase_storage as upload_to_supabase_storage, test_firebase_connection as test_supabase_connection, db_table, generate_firebase_preview_url as generate_document_preview_url, DEFAULT_STORAGE_BUCKET
 from notification_engine import (
     run_reminder_engine,
     scan_and_queue_expiring_reminders,
@@ -585,7 +586,7 @@ def api_save_store(store_id=None):
         return jsonify({'success': False, 'error': f"Failed to save Medical Store: {err_msg}"}), 500
 
 @app.route('/api/stores/<store_id>', methods=['DELETE'])
-@admin_required
+@login_required
 def api_delete_store(store_id):
     success = delete_medical_store(store_id)
     return jsonify({'success': success})
@@ -653,6 +654,7 @@ def api_upload_document():
     issue_date = request.form.get('issue_date')
     expiry_date = request.form.get('expiry_date')
     doc_number = sanitize_string(request.form.get('document_number', 'N/A'), 100)
+    remarks = sanitize_string(request.form.get('remarks', ''), 500)
     file = request.files.get('file')
 
     # Validate uploaded file type and size
@@ -673,7 +675,7 @@ def api_upload_document():
         renewal_required = request.form.get('renewal_required', 'true').lower() == 'true'
 
     store = get_medical_store(store_id) if store_id else None
-    firm_id = store.get('firm_id', 'BCWA-MED-000001') if store else 'BCWA-MED-000001'
+    shop_code = store.get('shop_code', store_id or 'BCWA-MED-000001') if store else 'BCWA-MED-000001'
 
     # Versioning: Find max version for this store and category
     existing_docs = []
@@ -697,10 +699,11 @@ def api_upload_document():
         except Exception:
             pass
 
+    from supabase_client import STORAGE_BUCKET, resolve_storage_bucket_and_path, upload_to_supabase_storage, delete_from_supabase_storage
+    bucket_name, storage_path = resolve_storage_bucket_and_path(shop_code, category, file_name)
     file_url = f"/static/docs/{file_name}"
     size_kb = random.randint(150, 800)
     mime_type = file.mimetype if file and hasattr(file, 'mimetype') else 'application/pdf'
-    storage_path = f"{firm_id}/{category}/{file_name}"
     uploaded_by = session.get('user', {}).get('name', 'Administrator')
     upload_now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -708,20 +711,21 @@ def api_upload_document():
         file_bytes = file.read()
         size_kb = max(1, int(len(file_bytes) / 1024))
         file.seek(0)
-        s_res = upload_to_supabase_storage(file, file_name, category=category, firm_id=firm_id)
+        s_res = upload_to_supabase_storage(file, file_name, category=category, firm_id=shop_code)
         if s_res.get('success'):
             file_url = s_res.get('url')
             storage_path = s_res.get('path', storage_path)
 
     doc_data = {
         'store_id': store_id,
-        'firm_id': firm_id,
+        'firm_id': shop_code,
         'category': category,
         'title': title,
         'document_number': doc_number,
         'file_name': file_name,
         'file_url': file_url,
         'storage_path': storage_path,
+        'bucket_name': STORAGE_BUCKET,
         'file_size_kb': size_kb,
         'mime_type': mime_type,
         'upload_time': upload_now_str,
@@ -732,14 +736,18 @@ def api_upload_document():
         'reminder_enabled': reminder_enabled,
         'renewal_required': renewal_required,
         'issue_date': issue_date,
-        'expiry_date': expiry_date
+        'expiry_date': expiry_date,
+        'remarks': remarks
     }
 
     res = save_document(doc_data)
+    log_activity(uploaded_by, "Document Uploaded", f"Uploaded {category} '{title}' ({file_name}) into bucket '{STORAGE_BUCKET}'", store_id)
+
     return jsonify({
         'success': True,
         'id': res['id'],
-        'firm_id': firm_id,
+        'firm_id': shop_code,
+        'bucket': STORAGE_BUCKET,
         'version': new_version,
         'file_url': file_url,
         'quality_status': res['quality_status'],
@@ -801,52 +809,42 @@ def api_preview_document(doc_id):
         if user.get('role') == 'Store' and user.get('store_id') != store_id:
             return jsonify({'error': 'Forbidden access to store documents'}), 403
 
+        from supabase_client import STORAGE_BUCKET, generate_document_preview_url, get_supabase_client
         raw_path = target_doc.get('storage_path') or target_doc.get('file_url') or ''
-        firm_id = target_doc.get('firm_id') or 'BCWA-MED-000001'
-        category = target_doc.get('category') or 'Other Documents'
+        store = get_medical_store(store_id) if store_id else None
+        shop_code = store.get('shop_code', 'BCWA-MED-000001') if store else 'BCWA-MED-000001'
+        category = target_doc.get('category') or 'Other'
         file_name = target_doc.get('file_name') or 'document.pdf'
-        bucket_name = DEFAULT_STORAGE_BUCKET
 
-        # Sanitize legacy bucket prefixes in storage_path
-        clean_path = re.sub(r'^(store-documents|owner-documents|pharmacist-documents|inspection-reports|other-documents)/', '', raw_path.lstrip('/'))
+        # Sanitize lead slash or bucket prefix in storage_path
+        clean_path = raw_path.lstrip('/')
+        for prefix in ['bcwa-documents/', 'documents/']:
+            if clean_path.startswith(prefix):
+                clean_path = clean_path[len(prefix):]
+
         if not clean_path or clean_path.startswith('static/'):
-            clean_path = f"{firm_id}/{category}/{file_name}"
+            clean_path = f"MedicalStores/{shop_code}/{category}/{file_name}"
 
-        # Ensure database row is updated with clean path
-        if raw_path != clean_path and not raw_path.startswith('static/'):
-            try:
-                db_table('documents').update({'storage_path': clean_path, 'file_url': f"https://{os.environ.get('SUPABASE_URL', '').replace('https://', '')}/storage/v1/object/public/documents/{clean_path}"}).eq('id', doc_id).execute()
-            except Exception:
-                pass
-
-        from supabase_client import get_supabase_client
+        preview_url = generate_document_preview_url(clean_path, bucket_name=STORAGE_BUCKET)
         client = get_supabase_client()
         pdf_bytes = None
 
         if client:
             try:
-                # 1. Download file bytes directly from Supabase Storage
-                res_bytes = client.storage.from_(bucket_name).download(clean_path)
+                res_bytes = client.storage.from_(STORAGE_BUCKET).download(clean_path)
                 if res_bytes and len(res_bytes) > 0:
                     pdf_bytes = res_bytes
             except Exception as e_down:
-                logging.warning(f"[PREVIEW NOTICE] File '{clean_path}' download from Supabase Storage notice: {e_down}")
-                # Try fallback download using raw_path
-                if raw_path and raw_path != clean_path:
-                    try:
-                        res_bytes = client.storage.from_(bucket_name).download(raw_path)
-                        if res_bytes and len(res_bytes) > 0:
-                            pdf_bytes = res_bytes
-                    except Exception:
-                        pass
+                logging.warning(f"[PREVIEW NOTICE] Download '{clean_path}' from bucket '{STORAGE_BUCKET}' notice: {e_down}")
 
-        # If json mode explicitly requested
-        if request.args.get('redirect') == 'false':
-            preview_url = generate_document_preview_url(clean_path, bucket_name=bucket_name)
+        log_activity(session.get('user', {}).get('name', 'User'), "Document Previewed", f"Previewed document '{file_name}' (ID: {doc_id})", store_id)
+
+        # Return JSON mode if requested
+        if request.args.get('redirect') == 'false' or request.headers.get('Accept') == 'application/json':
             return jsonify({
                 'success': True,
                 'document_id': doc_id,
-                'bucket_name': bucket_name,
+                'bucket_name': STORAGE_BUCKET,
                 'file_path': clean_path,
                 'object_exists': pdf_bytes is not None,
                 'preview_url': preview_url
@@ -865,7 +863,6 @@ def api_preview_document(doc_id):
             b"trailer << /Size 6 /Root 1 0 R >>\nstartxref\n441\n%%EOF\n"
         )
 
-        # Stream PDF bytes directly from Flask to eliminate CORS / Chrome PDF viewer errors
         if pdf_bytes:
             if not pdf_bytes.startswith(b'%PDF'):
                 pdf_bytes = valid_pdf_prefix + b"\n% Payload Bytes:\n" + pdf_bytes
@@ -880,7 +877,6 @@ def api_preview_document(doc_id):
                 }
             )
 
-        # Fallback for offline mode / unseeded storage: generate clean compliance PDF stream directly
         fallback_pdf = valid_pdf_prefix + f"\n% Document: {file_name} | Store: {store_id}\n".encode('utf-8')
         return Response(
             fallback_pdf,
@@ -893,7 +889,7 @@ def api_preview_document(doc_id):
         )
     except Exception as e:
         logging.error(f"[PREVIEW ERROR] Failed to stream preview for doc {doc_id}: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': f"Storage error: {str(e)}", 'bucket': STORAGE_BUCKET}), 500
 
 @app.route('/api/documents/<doc_id>/download', methods=['GET'])
 def api_download_document(doc_id):
@@ -912,7 +908,34 @@ def api_download_document(doc_id):
         if user.get('role') == 'Store' and user.get('store_id') != store_id:
             return jsonify({'error': 'Forbidden access to store documents'}), 403
 
+        from supabase_client import STORAGE_BUCKET, get_supabase_client
+        raw_path = target_doc.get('storage_path') or target_doc.get('file_url') or ''
+        file_name = target_doc.get('file_name') or 'document.pdf'
+
+        clean_path = raw_path.lstrip('/')
+        for prefix in ['bcwa-documents/', 'documents/']:
+            if clean_path.startswith(prefix):
+                clean_path = clean_path[len(prefix):]
+
+        client = get_supabase_client()
+        if client and clean_path:
+            try:
+                res_bytes = client.storage.from_(STORAGE_BUCKET).download(clean_path)
+                if res_bytes:
+                    log_activity(session.get('user', {}).get('name', 'User'), "Document Downloaded", f"Downloaded '{file_name}' from bucket '{STORAGE_BUCKET}'", store_id)
+                    return Response(
+                        res_bytes,
+                        mimetype='application/octet-stream',
+                        headers={
+                            'Content-Type': 'application/octet-stream',
+                            'Content-Disposition': f'attachment; filename="{file_name}"'
+                        }
+                    )
+            except Exception as e_down:
+                logging.warning(f"[DOWNLOAD NOTICE] Direct download failed for '{clean_path}': {e_down}")
+
         file_url = target_doc.get('file_url') or '/static/docs/sample.pdf'
+        log_activity(session.get('user', {}).get('name', 'User'), "Document Downloaded", f"Downloaded '{file_name}' via URL redirect", store_id)
         return jsonify({
             'success': True,
             'document': target_doc,
@@ -921,11 +944,78 @@ def api_download_document(doc_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/documents/<doc_id>', methods=['PUT'])
+@login_required
+def api_update_document(doc_id):
+    try:
+        doc_res = db_table('documents').select('*').eq('id', doc_id).execute()
+        if not doc_res.data:
+            return jsonify({'error': 'Document not found'}), 404
+
+        target_doc = doc_res.data[0]
+        store_id = target_doc.get('store_id')
+
+        category = request.form.get('category') or target_doc.get('category')
+        title = request.form.get('title') or target_doc.get('title')
+        expiry_date = request.form.get('expiry_date') or target_doc.get('expiry_date')
+        remarks = request.form.get('remarks') or target_doc.get('remarks')
+        file = request.files.get('file')
+
+        updated_data = dict(target_doc)
+        updated_data['category'] = category
+        updated_data['title'] = title
+        updated_data['expiry_date'] = expiry_date
+        updated_data['remarks'] = remarks
+
+        if file:
+            file_ok, file_err = validate_uploaded_file(file)
+            if not file_ok:
+                return jsonify({'success': False, 'error': file_err}), 400
+
+            from supabase_client import STORAGE_BUCKET, upload_to_supabase_storage, delete_from_supabase_storage
+            old_path = target_doc.get('storage_path')
+            if old_path:
+                delete_from_supabase_storage(old_path, bucket_name=STORAGE_BUCKET)
+
+            store = get_medical_store(store_id) if store_id else None
+            shop_code = store.get('shop_code', 'BCWA-MED-000001') if store else 'BCWA-MED-000001'
+            file_name = file.filename
+            new_v = target_doc.get('version', 1) + 1
+
+            s_res = upload_to_supabase_storage(file, file_name, category=category, firm_id=shop_code)
+            if s_res.get('success'):
+                updated_data['file_url'] = s_res.get('url')
+                updated_data['storage_path'] = s_res.get('path')
+                updated_data['file_name'] = file_name
+                updated_data['version'] = new_v
+                updated_data['file_size_kb'] = max(1, int(len(file.read()) / 1024))
+                file.seek(0)
+
+            log_activity(session.get('user', {}).get('name', 'Administrator'), "Document Replaced", f"Replaced file for '{title}' (Version {new_v})", store_id)
+        else:
+            log_activity(session.get('user', {}).get('name', 'Administrator'), "Document Updated", f"Updated metadata for '{title}'", store_id)
+
+        save_document(updated_data)
+        return jsonify({'success': True, 'document': updated_data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/documents/<doc_id>', methods=['DELETE'])
 @admin_required
 def api_delete_document(doc_id):
-    success = delete_document(doc_id)
-    return jsonify({'success': success})
+    try:
+        doc_res = db_table('documents').select('*').eq('id', doc_id).execute()
+        if doc_res.data:
+            target_doc = doc_res.data[0]
+            from supabase_client import STORAGE_BUCKET, delete_from_supabase_storage
+            old_path = target_doc.get('storage_path')
+            if old_path:
+                delete_from_supabase_storage(old_path, bucket_name=STORAGE_BUCKET)
+
+        success = delete_document(doc_id)
+        return jsonify({'success': success})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/calendar/events', methods=['GET'])
 @login_required
@@ -1502,8 +1592,8 @@ if __name__ == '__main__':
     env_name = app.config.get('ENV', 'development')
     print(f"🚀 Launching BCWA Portal [{env_name.upper()} MODE] on http://127.0.0.1:{port} (Debug: {debug_mode})")
     try:
-        app.run(host='0.0.0.0', port=port, debug=debug_mode)
+        app.run(host='0.0.0.0', port=port, debug=debug_mode, use_reloader=False)
     except OSError:
         port = 5005
         print(f"🚀 Port occupied. Fallback launching on http://127.0.0.1:{port}...")
-        app.run(host='0.0.0.0', port=port, debug=debug_mode)
+        app.run(host='0.0.0.0', port=port, debug=debug_mode, use_reloader=False)

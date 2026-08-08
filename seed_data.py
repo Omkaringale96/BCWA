@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timedelta
 from database import init_db
-from supabase_client import db_table
+from firebase_client import db_table
 from werkzeug.security import generate_password_hash
 
 STORE_PREFIXES = [
@@ -48,7 +48,7 @@ import os
 import glob
 from datetime import datetime
 from database import init_db
-from supabase_client import db_table, get_supabase_client
+from firebase_client import db_table, get_supabase_client
 from werkzeug.security import generate_password_hash
 
 def clear_production_database():

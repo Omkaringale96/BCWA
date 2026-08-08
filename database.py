@@ -5,7 +5,7 @@ import random
 import logging
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-from supabase_client import db_table, upload_to_supabase_storage, test_supabase_connection
+from firebase_client import db_table, upload_to_firebase_storage as upload_to_supabase_storage, test_firebase_connection as test_supabase_connection
 
 def get_db_connection():
     """Compatibility wrapper returning proxy client interface"""
@@ -612,6 +612,7 @@ def delete_medical_store(store_id):
     db_table('medical_stores').delete().eq('id', store_id).execute()
     db_table('pharmacists').update({'store_id': None}).eq('store_id', store_id).execute()
     log_activity("Administrator", "Store Deleted", f"Deleted Medical Store: {name}", store_id)
+    cache_clear()
     return True
 
 def get_pharmacists(query=None, store_id=None, page=None, limit=25):
@@ -751,18 +752,43 @@ def delete_pharmacist(pharmacist_id):
 
 def get_documents(store_id=None, category=None, query=None, page=None, limit=25):
     docs = db_table('documents').select('*').order('created_at', desc=True).execute().data or []
-    stores = db_table('medical_stores').select('id, store_name').execute().data or []
-    store_map = {s['id']: s['store_name'] for s in stores}
+    stores = db_table('medical_stores').select('id, store_name, shop_code, owner_name').execute().data or []
+    store_map = {s['id']: s for s in stores}
 
+    today = datetime.now().date()
     result = []
+
     for d in docs:
         if store_id and d.get('store_id') != store_id:
             continue
-        if category and d.get('category') != category:
+        if category and category != 'All' and d.get('category') != category:
             continue
 
         d_copy = dict(d)
-        d_copy['store_name'] = store_map.get(d.get('store_id'), 'System Doc')
+        st = store_map.get(d.get('store_id'), {})
+        d_copy['store_name'] = st.get('store_name', 'System Doc')
+        d_copy['shop_code'] = st.get('shop_code', 'BCWA-MED-000000')
+        d_copy['owner_name'] = st.get('owner_name', 'System')
+
+        # Expiry status calculation
+        exp_date_str = d_copy.get('expiry_date')
+        if exp_date_str:
+            try:
+                exp_dt = datetime.strptime(str(exp_date_str), '%Y-%m-%d').date()
+                days_left = (exp_dt - today).days
+                d_copy['days_remaining'] = days_left
+                if days_left < 0:
+                    d_copy['expiry_status'] = 'Expired'
+                elif days_left <= 30:
+                    d_copy['expiry_status'] = 'Expiring in 30 Days'
+                else:
+                    d_copy['expiry_status'] = 'Valid'
+            except Exception:
+                d_copy['days_remaining'] = None
+                d_copy['expiry_status'] = 'Valid'
+        else:
+            d_copy['days_remaining'] = None
+            d_copy['expiry_status'] = 'No Expiry Date'
 
         if query:
             q = query.strip().lower()
@@ -770,7 +796,10 @@ def get_documents(store_id=None, category=None, query=None, page=None, limit=25)
                 q in d_copy.get('title', '').lower() or
                 q in d_copy.get('file_name', '').lower() or
                 q in d_copy.get('category', '').lower() or
-                q in d_copy.get('store_name', '').lower()
+                q in d_copy.get('store_name', '').lower() or
+                q in d_copy.get('shop_code', '').lower() or
+                q in d_copy.get('owner_name', '').lower() or
+                q in d_copy.get('expiry_status', '').lower()
             )
             if not match:
                 continue
@@ -798,21 +827,18 @@ def save_document(data):
     file_name = data.get('file_name', 'document.pdf')
     size_kb = data.get('file_size_kb', 320)
 
-    quality_status = 'Passed'
-    quality_notes = 'Document resolution clear, text legible.'
+    quality_status = data.get('quality_status') or 'Passed'
+    quality_notes = data.get('quality_notes') or 'Document verified and uploaded.'
 
     if size_kb < 30:
         quality_status = 'Warning'
-        quality_notes = 'Low resolution detected. Text may be slightly blurry.'
-    elif 'blur' in file_name.lower() or 'sample' in file_name.lower():
-        quality_status = 'Warning'
-        quality_notes = 'Blur analysis: Moderate text blur. Ensure license numbers are readable.'
+        quality_notes = 'Low resolution detected. Ensure document text is legible.'
 
     record = {
         'id': doc_id,
         'store_id': data.get('store_id'),
         'category': data.get('category', 'Drug License'),
-        'title': data.get('title'),
+        'title': data.get('title', 'Document'),
         'file_name': file_name,
         'file_url': data.get('file_url', '/static/docs/sample.pdf'),
         'file_size_kb': size_kb,
@@ -827,7 +853,12 @@ def save_document(data):
     }
 
     db_table('documents').upsert(record).execute()
-    log_activity("Office Staff", "Document Uploaded", f"Uploaded {data.get('category')} for Store ID: {data.get('store_id')}", data.get('store_id'))
+    log_activity(
+        data.get('uploaded_by', 'Office Staff'),
+        "Document Saved",
+        f"Saved {data.get('category')} '{data.get('title')}' for Store ID: {data.get('store_id')}",
+        data.get('store_id')
+    )
 
     try:
         import threading
@@ -844,6 +875,15 @@ def save_document(data):
     return {'id': doc_id, 'quality_status': quality_status, 'quality_notes': quality_notes}
 
 def delete_document(doc_id):
+    doc_res = db_table('documents').select('*').eq('id', doc_id).execute().data
+    if doc_res:
+        d = doc_res[0]
+        log_activity(
+            "Office Staff",
+            "Document Deleted",
+            f"Deleted document '{d.get('title', doc_id)}' (Category: {d.get('category')})",
+            d.get('store_id')
+        )
     db_table('documents').delete().eq('id', doc_id).execute()
     return True
 

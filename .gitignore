@@ -6,3 +6,5 @@ __pycache__/
 .DS_Store
 *.log
 .venv/
+firebase_credentials.json
+*-firebase-adminsdk-*.json

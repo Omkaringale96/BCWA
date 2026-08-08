@@ -4,7 +4,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timedelta
-from supabase_client import db_table
+from firebase_client import db_table
 import notification_service
 import email_service
 from database import is_expiry_document

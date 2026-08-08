@@ -348,6 +348,26 @@ const BCWAApp = {
         }
     },
 
+    async deleteDocument(docId) {
+        if (!confirm('Are you sure you want to delete this document from Supabase Storage?')) return;
+        try {
+            const res = await fetch(`/api/documents/${docId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                if (typeof this.showToast === 'function') {
+                    this.showToast('Document deleted successfully from Supabase Storage.', 'success');
+                } else {
+                    alert('Document deleted successfully from Supabase Storage.');
+                }
+                this.loadDocumentVault();
+            } else {
+                alert(data.error || 'Failed to delete document.');
+            }
+        } catch (err) {
+            alert('Error deleting document: ' + err.message);
+        }
+    },
+
     async loadStoreDocuments() {
         try {
             const res = await fetch('/api/store/documents');
@@ -686,6 +706,7 @@ const BCWAApp = {
                         <td>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.openStoreProfile('${st.id}')">Profile</button>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.editStore('${st.id}')">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="BCWAApp.deleteStore('${st.id}')">Delete</button>
                         </td>
                     </tr>
                 `;
@@ -774,13 +795,20 @@ const BCWAApp = {
                 return;
             }
 
-            tbody.innerHTML = docItems.map(doc => `
+            tbody.innerHTML = docItems.map(doc => {
+                const expBadge = doc.expiry_status === 'Expired'
+                    ? `<span class="badge badge-danger">Expired</span>`
+                    : (doc.expiry_status === 'Expiring in 30 Days'
+                        ? `<span class="badge badge-warning">Expiring Soon (${doc.days_remaining}d)</span>`
+                        : `<span class="badge badge-success">${doc.expiry_date || 'N/A'}</span>`);
+
+                return `
                 <tr>
                     <td>
                         <strong>${doc.title}</strong>
                         <div class="text-secondary" style="font-size:11px;">${doc.file_name} &bull; ${doc.file_size_kb} KB</div>
                     </td>
-                    <td>${doc.store_name || 'System Doc'}</td>
+                    <td>${doc.store_name || 'System Doc'} <br><small class="text-secondary">${doc.shop_code || ''}</small></td>
                     <td><span class="badge badge-info">${doc.category}</span></td>
                     <td>
                         <span class="badge ${doc.quality_status === 'Passed' ? 'badge-success' : 'badge-warning'}">
@@ -788,15 +816,17 @@ const BCWAApp = {
                         </span>
                         <div class="text-secondary" style="font-size:10px;">${doc.quality_notes}</div>
                     </td>
-                    <td>${doc.expiry_date || 'N/A'}</td>
+                    <td>${expBadge}</td>
                     <td>
-                        <div style="display:flex; gap:8px; align-items:center;">
+                        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
                             <a href="/api/documents/${doc.id}/preview" target="_blank" class="action-btn btn-action-preview"><i data-lucide="eye"></i> Preview</a>
-                            <button class="action-btn btn-action-resend" onclick="BCWAApp.viewDocumentVersions('${doc.id}')"><i data-lucide="history"></i> v${doc.version || 1} Details</button>
+                            <a href="/api/documents/${doc.id}/download" download class="action-btn btn-action-download" style="background:var(--primary-color, #0f172a); color:white;"><i data-lucide="download"></i> Download</a>
+                            <button class="action-btn btn-action-resend" onclick="BCWAApp.viewDocumentVersions('${doc.id}')"><i data-lucide="history"></i> v${doc.version || 1}</button>
+                            <button class="action-btn btn-action-delete" style="background:#ef4444; color:white;" onclick="BCWAApp.deleteDocument('${doc.id}')"><i data-lucide="trash-2"></i> Delete</button>
                         </div>
                     </td>
                 </tr>
-            `).join('');
+            `;}).join('');
 
             if (data.pages) {
                 this.renderPagination('pagination-documents', 'documents', page, data.pages, data.total);
@@ -1423,9 +1453,21 @@ const BCWAApp = {
 
     async deleteStore(id) {
         if (!confirm('Are you sure you want to delete this Medical Store record?')) return;
-        await fetch(`/api/stores/${id}`, { method: 'DELETE' });
-        closeDrawer('drawer-store-profile');
-        this.loadMedicalStores();
+        try {
+            const res = await fetch(`/api/stores/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                if (typeof closeDrawer === 'function') closeDrawer('drawer-store-profile');
+                this.loadMedicalStores();
+                this.loadDashboardStats();
+                if (typeof this.showToast === 'function') this.showToast('Medical Store deleted successfully', 'success');
+            } else {
+                alert(data.error || 'Failed to delete Medical Store');
+            }
+        } catch (e) {
+            console.error('Error deleting store:', e);
+            alert('Failed to delete Medical Store');
+        }
     },
 
     openAddPharmacistModal() {
