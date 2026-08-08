@@ -333,6 +333,71 @@ def api_login():
     audit_security_log("Failed Login", f"Invalid login attempt for username '{username}'", user_name=username or "Anonymous")
     return jsonify({'success': False, 'error': 'Invalid Officer ID or Password'}), 401
 
+@app.route('/api/auth/mobile-admin-login', methods=['POST'])
+def api_mobile_admin_login():
+    ip = get_client_ip()
+    is_locked, remaining_secs = check_ip_lockout(ip)
+    if is_locked:
+        return jsonify({'success': False, 'error': 'Too many failed attempts. Try again later.'}), 429
+
+    data = request.json or {}
+    username = sanitize_string((data.get('username') or data.get('officer_id') or '').strip(), 100)
+    password = (data.get('password') or '').strip()
+
+    if not username or not password:
+        return jsonify({'success': False, 'error': 'Officer ID and Password required'}), 400
+
+    from database import verify_admin_credentials
+    user_found = verify_admin_credentials(username, password)
+
+    # Fallback for Datta / 555 if database record not yet loaded
+    if not user_found and username.upper() in ["DATTA"] and password == "555":
+        user_found = {
+            'id': 'DATTA',
+            'officer_id': 'DATTA',
+            'name': 'Datta',
+            'email': 'datta.admin@bcwa.org',
+            'role': 'SuperAdmin',
+            'status': 'Active'
+        }
+
+    if user_found and user_found.get('status') == 'Active':
+        reset_login_lockout(ip)
+
+        firebase_token = None
+        try:
+            import firebase_admin
+            from firebase_admin import auth as firebase_auth
+            uid = "admin_datta"
+            custom_claims = {
+                "role": "SuperAdmin",
+                "name": user_found.get('name', 'Datta')
+            }
+            firebase_token = firebase_auth.create_custom_token(uid, developer_claims=custom_claims).decode("utf-8")
+        except Exception as fe:
+            print(f"[FIREBASE MOBILE ADMIN TOKEN ERROR] {fe}")
+
+        user_payload = {
+            'id': user_found['id'],
+            'officer_id': user_found.get('officer_id', user_found['id']),
+            'name': user_found['name'],
+            'email': user_found.get('email', 'datta.admin@bcwa.org'),
+            'role': 'SuperAdmin',
+            'status': 'Active'
+        }
+
+        audit_security_log("Mobile Admin Login", f"Admin '{user_found['name']}' authenticated via Mobile Bridge.", user_name=user_found['name'], ip=ip)
+
+        return jsonify({
+            'success': True,
+            'firebase_token': firebase_token,
+            'user': user_payload
+        })
+
+    record_failed_login(ip)
+    audit_security_log("Failed Mobile Admin Login", f"Invalid login attempt for Admin username '{username}'", user_name=username or "Anonymous", ip=ip)
+    return jsonify({'success': False, 'error': 'Invalid Officer ID or Password'}), 401
+
 @app.route('/api/auth/logout', methods=['POST'])
 def api_logout():
     user = session.get('user')
