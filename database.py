@@ -457,6 +457,18 @@ def get_medical_store(store_id):
     store['documents'] = doc_res.data
     return store
 
+def generate_option1_password(owner_mobile, shop_code):
+    digits = ''.join(c for c in str(owner_mobile or '') if c.isdigit())
+    if len(digits) >= 12 and digits.startswith('91'):
+        digits = digits[2:]
+    if len(digits) >= 6:
+        return digits[-6:]
+    elif len(digits) >= 4:
+        return digits[-4:] + "26"
+    else:
+        clean_code = ''.join(c for c in str(shop_code or '') if c.isalnum()).upper()
+        return f"{clean_code[-6:]}@2026"
+
 def save_medical_store(data):
     store_id = data.get('id')
     now = datetime.now()
@@ -484,8 +496,9 @@ def save_medical_store(data):
     if not store_id:
         store_id = f"MS-{random.randint(1000, 9999)}"
 
-    firm_id = (data.get('firm_id') or store_id).strip().upper()
-    shop_code = (data.get('shop_code') or f"BCWA-BSR-{random.randint(100, 999)}").strip()
+    login_bcwa_id = (data.get('firm_id') or data.get('shop_code') or f"BCWA-{random.randint(1000, 9999)}").strip().upper()
+    firm_id = login_bcwa_id
+    shop_code = login_bcwa_id
 
     dups = check_duplicates(
         dl_20b=data.get('dl_20b_number'),
@@ -498,6 +511,9 @@ def save_medical_store(data):
     dl_21b = (data.get('dl_21b_number') or '').strip() or dl_20b
     fssai = (data.get('fssai_number') or '').strip() or f"21524{random.randint(100000000, 999999999)}"
 
+    # Option 1 Auto-Generated Password
+    auto_password = data.get('initial_password') or generate_option1_password(owner_mobile, shop_code)
+
     record = {
         'id': store_id,
         'firm_id': firm_id,
@@ -505,6 +521,8 @@ def save_medical_store(data):
         'storeName': store_name,
         'shop_code': shop_code,
         'shopCode': shop_code,
+        'initial_password': auto_password,
+        'initialPassword': auto_password,
         'business_type': data.get('business_type') or 'Retail Pharmacy',
         'businessType': data.get('business_type') or 'Retail Pharmacy',
         'drug_license_category': data.get('drug_license_category') or '20B / 21B',
@@ -554,6 +572,32 @@ def save_medical_store(data):
         'updated_at': now_str,
         'updatedAt': now_str
     }
+
+    # Ensure store account exists for Store Login using store_id AND shop_code
+    try:
+        create_or_update_store_account(
+            firm_id=store_id,
+            password=auto_password,
+            store_id=store_id,
+            owner_name=owner_name,
+            store_name=store_name,
+            email=data.get('owner_email', f"store_{store_id.lower()}@bcwa.org"),
+            mobile=owner_mobile,
+            status=record['status']
+        )
+        if shop_code != store_id:
+            create_or_update_store_account(
+                firm_id=shop_code,
+                password=auto_password,
+                store_id=store_id,
+                owner_name=owner_name,
+                store_name=store_name,
+                email=data.get('owner_email', f"store_{store_id.lower()}@bcwa.org"),
+                mobile=owner_mobile,
+                status=record['status']
+            )
+    except Exception as e_acc:
+        print(f"[STORE ACCOUNT AUTO CREATION NOTICE] {e_acc}")
 
     print(f"[STORE REGISTRATION PAYLOAD] Store ID: {store_id} | Firm ID: {firm_id} | Payload:\n{json.dumps(record, indent=2)}")
     logging.info(f"[STORE REGISTRATION PAYLOAD] Store ID: {store_id} | Firm ID: {firm_id} | Payload:\n{json.dumps(record, indent=2)}")

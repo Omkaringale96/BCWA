@@ -687,9 +687,16 @@ def api_save_store(store_id=None):
         return jsonify({
             'success': True,
             'id': res['id'],
-            'firm_id': res.get('firm_id', res['id']),
-            'shop_code': res['shop_code'],
-            'warnings': res['warnings']
+            'store_id': res['id'],
+            'firm_id': res.get('firm_id') or res.get('shop_code') or res['id'],
+            'shop_code': res.get('shop_code') or res.get('firm_id') or res['id'],
+            'initial_password': res.get('initial_password') or res.get('initialPassword') or '',
+            'store_name': res.get('store_name'),
+            'owner_name': res.get('owner_name'),
+            'owner_mobile': res.get('owner_mobile'),
+            'address': res.get('address'),
+            'created_at': res.get('created_at') or datetime.now().strftime('%Y-%m-%d'),
+            'warnings': res.get('warnings', [])
         })
     except ValueError as ve:
         err_msg = str(ve)
