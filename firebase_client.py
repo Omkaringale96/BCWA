@@ -267,35 +267,57 @@ def firestore_query(table_name, columns="*", filters=None, order_by=None, limit_
     if not db:
         return []
 
-    col_ref = db.collection(table_name)
-    docs = col_ref.stream()
     results = []
-    
-    for d in docs:
-        item = d.to_dict()
-        if 'id' not in item:
-            item['id'] = d.id
-        
-        match = True
-        if filters:
-            for op, col, val in filters:
-                r_val = item.get(col)
-                if op == 'eq' and str(r_val or '').lower() != str(val or '').lower():
-                    match = False
-                elif op == 'neq' and str(r_val or '').lower() == str(val or '').lower():
-                    match = False
-                elif op == 'lte' and str(r_val or '') > str(val or ''):
-                    match = False
-                elif op == 'gte' and str(r_val or '') < str(val or ''):
-                    match = False
-                elif op == 'lt' and str(r_val or '') >= str(val or ''):
-                    match = False
-                elif op == 'in':
-                    vals_str = [str(v).lower() for v in (val if isinstance(val, (list, tuple)) else [val])]
-                    if str(r_val or '').lower() not in vals_str:
+
+    # Optimization: If filtering by ID equality directly, try single doc fetch
+    id_filter_val = None
+    if filters:
+        for op, col, val in filters:
+            if op == 'eq' and col == 'id' and val:
+                id_filter_val = str(val).strip()
+                break
+
+    if id_filter_val:
+        try:
+            doc_snap = db.collection(table_name).document(id_filter_val).get()
+            if doc_snap.exists:
+                item = doc_snap.to_dict() or {}
+                if 'id' not in item:
+                    item['id'] = doc_snap.id
+                return [item]
+        except Exception as e_single:
+            logging.warning(f"[FIRESTORE SINGLE DOC FETCH WARNING {table_name}] {e_single}")
+
+    try:
+        col_ref = db.collection(table_name)
+        docs = col_ref.stream()
+        for d in docs:
+            item = d.to_dict() or {}
+            if 'id' not in item:
+                item['id'] = d.id
+            
+            match = True
+            if filters:
+                for op, col, val in filters:
+                    r_val = item.get(col)
+                    if op == 'eq' and str(r_val or '').lower() != str(val or '').lower():
                         match = False
-        if match:
-            results.append(item)
+                    elif op == 'neq' and str(r_val or '').lower() == str(val or '').lower():
+                        match = False
+                    elif op == 'lte' and str(r_val or '') > str(val or ''):
+                        match = False
+                    elif op == 'gte' and str(r_val or '') < str(val or ''):
+                        match = False
+                    elif op == 'lt' and str(r_val or '') >= str(val or ''):
+                        match = False
+                    elif op == 'in':
+                        vals_str = [str(v).lower() for v in (val if isinstance(val, (list, tuple)) else [val])]
+                        if str(r_val or '').lower() not in vals_str:
+                            match = False
+            if match:
+                results.append(item)
+    except Exception as e_stream:
+        logging.error(f"[FIRESTORE QUERY EXCEPTION {table_name}] {e_stream}")
 
     if order_by:
         col, desc = order_by
@@ -311,24 +333,26 @@ def firestore_update(table_name, data, filters):
     if not db:
         return []
 
-    col_ref = db.collection(table_name)
-    docs = col_ref.stream()
     updated = []
+    try:
+        col_ref = db.collection(table_name)
+        docs = col_ref.stream()
+        for d in docs:
+            item = d.to_dict() or {}
+            if 'id' not in item or not item['id']:
+                item['id'] = d.id
 
-    for d in docs:
-        item = d.to_dict()
-        if 'id' not in item or not item['id']:
-            item['id'] = d.id
-
-        match = True
-        if filters:
-            for op, col, val in filters:
-                if op == 'eq' and str(item.get(col) or '').lower() != str(val or '').lower():
-                    match = False
-        if match:
-            d.reference.update(data)
-            item.update(data)
-            updated.append(item)
+            match = True
+            if filters:
+                for op, col, val in filters:
+                    if op == 'eq' and str(item.get(col) or '').lower() != str(val or '').lower():
+                        match = False
+            if match:
+                d.reference.update(data)
+                item.update(data)
+                updated.append(item)
+    except Exception as e_upd:
+        logging.error(f"[FIRESTORE UPDATE EXCEPTION {table_name}] {e_upd}")
 
     return updated
 
@@ -337,29 +361,31 @@ def firestore_delete(table_name, filters):
     if not db:
         return []
 
-    col_ref = db.collection(table_name)
-    docs = col_ref.stream()
     deleted = []
+    try:
+        col_ref = db.collection(table_name)
+        docs = col_ref.stream()
+        for d in docs:
+            item = d.to_dict() or {}
+            if 'id' not in item or not item['id']:
+                item['id'] = d.id
 
-    for d in docs:
-        item = d.to_dict()
-        if 'id' not in item or not item['id']:
-            item['id'] = d.id
-
-        match = True
-        if filters:
-            for op, col, val in filters:
-                if op == 'eq' and str(item.get(col) or '').lower() != str(val or '').lower():
-                    match = False
-                elif op == 'neq' and str(item.get(col) or '').lower() == str(val or '').lower():
-                    match = False
-                elif op == 'in':
-                    vals_str = [str(v).lower() for v in (val if isinstance(val, (list, tuple)) else [val])]
-                    if str(item.get(col) or '').lower() not in vals_str:
+            match = True
+            if filters:
+                for op, col, val in filters:
+                    if op == 'eq' and str(item.get(col) or '').lower() != str(val or '').lower():
                         match = False
-        if match:
-            d.reference.delete()
-            deleted.append(item)
+                    elif op == 'neq' and str(item.get(col) or '').lower() == str(val or '').lower():
+                        match = False
+                    elif op == 'in':
+                        vals_str = [str(v).lower() for v in (val if isinstance(val, (list, tuple)) else [val])]
+                        if str(item.get(col) or '').lower() not in vals_str:
+                            match = False
+            if match:
+                d.reference.delete()
+                deleted.append(item)
+    except Exception as e_del:
+        logging.error(f"[FIRESTORE DELETE EXCEPTION {table_name}] {e_del}")
 
     return deleted
 
