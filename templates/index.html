@@ -1312,215 +1312,54 @@
                 </button>
             </div>
         </div>
-    </div>
-
-    <!-- BCWA SMART CARD MODAL -->
-    <div class="modal-overlay" id="modal-bcwa-smart-card">
-        <div class="modal-content" style="max-width: 760px; width: 95%;">
-            <div class="modal-header" style="background:#0F172A; color:#FFF;">
-                <h3 style="color:#FFF; display:flex; align-items:center; gap:8px;">
-                    <i data-lucide="id-card" style="color:#0D9488;"></i>
-                    <span>BCWA Official Member Smart Card</span>
+    <!-- BCWA SMART MEMBER CARD MODAL -->
+    <div class="modal-overlay" id="modal-smart-card">
+        <div class="modal-content" style="max-width:540px; background:#0f172a; color:#fff; border-radius:16px; padding:24px;">
+            <div class="modal-header" style="border-bottom:1px solid #334155; padding-bottom:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="color:#38bdf8; margin:0; font-size:18px; display:flex; align-items:center; gap:8px;">
+                    🪪 BCWA Smart Member Card
                 </h3>
-                <button class="btn-close" style="color:#FFF;" onclick="closeModal('modal-bcwa-smart-card')">&times;</button>
+                <button class="btn-close" onclick="closeModal('modal-smart-card')" style="color:#fff;">&times;</button>
             </div>
-            <div class="modal-body" style="background:#F1F5F9; padding:20px; display:flex; flex-direction:column; gap:20px; align-items:center;">
-                
-                <!-- FRONT CARD CONTAINER -->
-                <div id="smart-card-front" style="width:100%; max-width:680px; aspect-ratio:1.6/1; background:#FFF; border-radius:18px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); border:1px solid #CBD5E1; overflow:hidden; position:relative; display:flex; flex-direction:column; font-family:'Inter', sans-serif;">
-                    
-                    <!-- TOP MAIN SECTION -->
-                    <div style="flex:1; display:flex; position:relative;">
-                        
-                        <!-- LEFT NAVY ARC SIDEBAR -->
-                        <div style="width:28%; background:linear-gradient(135deg, #0A1E3F 0%, #0F2C59 100%); position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:12px; color:#FFF; border-top-right-radius:50px 100%; border-bottom-right-radius:50px 100%; border-right:4px solid #D4AF37; box-shadow: 4px 0 12px rgba(0,0,0,0.2); z-index:2;">
-                            <!-- EMBLEM CIRCLE -->
-                            <div style="width:100px; height:100px; border-radius:50%; background:#FFF; border:3px solid #FFF; box-shadow:0 4px 10px rgba(0,0,0,0.2); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4px; text-align:center; position:relative;">
-                                <img src="/static/img/bcwa_logo.png" alt="BCWA Logo" style="width:85px; height:85px; object-fit:contain;" onerror="this.src='/static/logo.png'">
-                            </div>
-                            <div style="margin-top:8px; font-size:7px; font-weight:700; color:#D4AF37; letter-spacing:0.5px; text-align:center; text-transform:uppercase;">
-                                TOGETHER FOR ETHICS,<br>HEALTH & COMMUNITY WELFARE
-                            </div>
+            <div class="modal-body" style="padding:0;">
+                <!-- CARD FRONT -->
+                <div id="smart-card-front" style="background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:2px solid #38bdf8; border-radius:12px; padding:16px; margin-bottom:16px; position:relative; overflow:hidden; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:10px; margin-bottom:12px;">
+                        <div>
+                            <h4 style="color:#f8fafc; margin:0; font-size:15px; font-weight:700;">BCWA CHEMIST MEMBER CARD</h4>
+                            <span style="color:#38bdf8; font-size:10px; text-transform:uppercase; letter-spacing:1px;">BOISAR CHEMIST WELFARE ASSOCIATION</span>
                         </div>
-
-                        <!-- RIGHT CONTENT AREA WITH WATERMARK -->
-                        <div style="flex:1; padding:14px 18px; display:flex; flex-direction:column; justify-content:space-between; position:relative; background:#FFF;">
-                            <!-- SUBTLE WATERMARK BACKGROUND -->
-                            <div style="position:absolute; right:10px; top:50%; transform:translateY(-50%); width:180px; height:180px; opacity:0.06; pointer-events:none; z-index:0;">
-                                <img src="/static/img/bcwa_logo.png" style="width:100%; height:100%; object-fit:contain;" onerror="this.src='/static/logo.png'">
-                            </div>
-
-                            <!-- HEADER TITLE -->
-                            <div style="position:relative; z-index:1;">
-                                <div style="font-size:24px; font-weight:900; color:#0A1E3F; letter-spacing:1px; line-height:1;">BCWA</div>
-                                <div style="font-size:11px; font-weight:800; color:#15803D; letter-spacing:0.5px; margin-top:2px;">BOISAR CHEMIST WELFARE ASSOCIATION</div>
-                                
-                                <!-- BADGE PILL -->
-                                <div style="display:inline-flex; align-items:center; gap:8px; margin-top:6px;">
-                                    <div style="height:2px; width:20px; background:#15803D;"></div>
-                                    <div style="background:#0A1E3F; color:#FFF; font-size:10px; font-weight:800; padding:3px 12px; border-radius:12px; letter-spacing:0.5px;">MEDICAL STORE MEMBER CARD</div>
-                                    <div style="height:2px; width:20px; background:#15803D;"></div>
-                                </div>
-                            </div>
-
-                            <!-- DATA FIELDS TABLE -->
-                            <div style="position:relative; z-index:1; font-size:10.5px; margin-top:8px; display:flex; flex-direction:column; gap:5px;">
-                                <div style="display:flex; align-items:center;">
-                                    <span style="width:140px; font-weight:700; color:#0A1E3F; display:flex; align-items:center; gap:5px;">
-                                        <span>🏪</span> STORE NAME
-                                    </span>
-                                    <span style="font-weight:700; color:#0A1E3F; margin-right:6px;">:</span>
-                                    <span id="sc-store-name" style="font-weight:800; color:#0F172A; text-transform:uppercase;">DISHA MEDICAL STORES</span>
-                                </div>
-
-                                <div style="display:flex; align-items:center;">
-                                    <span style="width:140px; font-weight:700; color:#0A1E3F; display:flex; align-items:center; gap:5px;">
-                                        <span>👤</span> OWNER NAME
-                                    </span>
-                                    <span style="font-weight:700; color:#0A1E3F; margin-right:6px;">:</span>
-                                    <span id="sc-owner-name" style="font-weight:800; color:#0F172A; text-transform:uppercase;">VINAYAK BHOSALE</span>
-                                </div>
-
-                                <div style="display:flex; align-items:center;">
-                                    <span style="width:140px; font-weight:700; color:#0A1E3F; display:flex; align-items:center; gap:5px;">
-                                        <span>📞</span> OWNER CONTACT
-                                    </span>
-                                    <span style="font-weight:700; color:#0A1E3F; margin-right:6px;">:</span>
-                                    <span id="sc-owner-contact" style="font-weight:800; color:#0F172A;">+91 98765 43210</span>
-                                </div>
-
-                                <div style="display:flex; align-items:center;">
-                                    <span style="width:140px; font-weight:700; color:#0A1E3F; display:flex; align-items:center; gap:5px;">
-                                        <span>💳</span> STORE ID
-                                    </span>
-                                    <span style="font-weight:700; color:#0A1E3F; margin-right:6px;">:</span>
-                                    <span id="sc-store-id" style="background:#0A1E3F; color:#FFF; font-weight:800; font-size:10px; padding:2px 10px; border-radius:10px;">MS-1271</span>
-                                </div>
-
-                                <div style="display:flex; align-items:center;">
-                                    <span style="width:140px; font-weight:700; color:#0A1E3F; display:flex; align-items:center; gap:5px;">
-                                        <span>📇</span> FIRM ID / SHOP CODE
-                                    </span>
-                                    <span style="font-weight:700; color:#0A1E3F; margin-right:6px;">:</span>
-                                    <span id="sc-shop-code" style="font-weight:800; color:#15803D;">BCWA-BSR-974</span>
-                                </div>
-
-                                <div style="display:flex; align-items:flex-start;">
-                                    <span style="width:140px; font-weight:700; color:#0A1E3F; display:flex; align-items:center; gap:5px;">
-                                        <span>📍</span> STORE ADDRESS
-                                    </span>
-                                    <span style="font-weight:700; color:#0A1E3F; margin-right:6px;">:</span>
-                                    <span id="sc-store-address" style="font-size:9.5px; color:#334155; font-weight:600; flex:1; line-height:1.2;">Shop No. 7, Sai Plaza, Near Boisar Station, Boisar (West), Tal. Palghar, Dist. Palghar, Maharashtra - 401501</span>
-                                </div>
-                            </div>
-
-                        </div>
+                        <span class="badge" style="background:#22c55e; color:#fff; font-size:10px; padding:4px 8px; border-radius:4px;">ACTIVE MEMBER</span>
                     </div>
-
-                    <!-- BOTTOM BANNER -->
-                    <div style="height:32px; background:linear-gradient(90deg, #0A1E3F 0%, #0F2C59 60%, #15803D 100%); display:flex; align-items:center; justify-content:space-between; padding:0 16px; color:#FFF; font-size:10px; font-weight:700;">
-                        <div style="display:flex; align-items:center; gap:6px;">
-                            <span>📅 CARD ISSUE DATE :</span>
-                            <span id="sc-issue-date" style="color:#FFF; font-weight:800;">09 AUG 2026</span>
+                    <div style="display:flex; gap:16px; align-items:center;">
+                        <div style="width:74px; height:74px; border-radius:50%; background:#334155; border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
+                            <img id="card-owner-photo" src="https://ui-avatars.com/api/?name=Chemist&background=38bdf8&color=fff" alt="Owner" style="width:100%; height:100%; object-fit:cover;">
                         </div>
-                        <div style="color:#D4AF37; font-weight:800; letter-spacing:1px; display:flex; align-items:center; gap:4px;">
-                            <span>★ MEMBER OF BCWA ★</span>
+                        <div style="flex:1; font-size:12px; line-height:1.6;">
+                            <div><strong style="color:#94a3b8;">Store Name:</strong> <span id="card-store-name" style="color:#fff; font-weight:600;">-</span></div>
+                            <div><strong style="color:#94a3b8;">Owner Name:</strong> <span id="card-owner-name" style="color:#38bdf8; font-weight:600;">-</span></div>
+                            <div><strong style="color:#94a3b8;">Store ID:</strong> <code id="card-store-id" style="color:#f59e0b; background:#1e293b; padding:2px 6px; border-radius:4px;">-</code></div>
+                            <div><strong style="color:#94a3b8;">Mobile:</strong> <span id="card-owner-mobile" style="color:#e2e8f0;">-</span></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- BACK CARD CONTAINER -->
-                <div id="smart-card-back" style="width:100%; max-width:680px; aspect-ratio:1.6/1; background:#FFF; border-radius:18px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); border:1px solid #CBD5E1; overflow:hidden; position:relative; display:flex; flex-direction:column; font-family:'Inter', sans-serif;">
-                    
-                    <!-- TOP NAVY HEADER BAR -->
-                    <div style="height:30px; background:#0A1E3F; color:#FFF; display:flex; align-items:center; justify-content:center; gap:10px; font-size:10.5px; font-weight:800; letter-spacing:0.8px;">
-                        <div style="height:2px; width:30px; background:#15803D;"></div>
-                        <span>TOGETHER FOR ETHICS, HEALTH & COMMUNITY WELFARE</span>
-                        <div style="height:2px; width:30px; background:#15803D;"></div>
+                <!-- CARD BACK -->
+                <div id="smart-card-back" style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border:1px solid #334155; border-radius:12px; padding:16px; font-size:11px; color:#cbd5e1;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+                        <div><strong style="color:#94a3b8;">20B License:</strong> <code id="card-dl-20b" style="color:#38bdf8;">-</code></div>
+                        <div><strong style="color:#94a3b8;">21B License:</strong> <code id="card-dl-21b" style="color:#38bdf8;">-</code></div>
+                        <div><strong style="color:#94a3b8;">DL Expiry:</strong> <span id="card-dl-expiry" style="color:#22c55e;">-</span></div>
+                        <div><strong style="color:#94a3b8;">FSSAI No:</strong> <code id="card-fssai" style="color:#f59e0b;">-</code></div>
                     </div>
-
-                    <!-- MAIN MIDDLE CONTENT -->
-                    <div style="flex:1; display:flex; position:relative;">
-                        
-                        <!-- LEFT COLUMN: ABOUT BCWA -->
-                        <div style="flex:1; padding:12px 14px; border-right:1px solid #E2E8F0; display:flex; flex-direction:column; justify-content:space-between;">
-                            <div>
-                                <div style="font-size:10px; font-weight:800; color:#15803D; text-align:center; margin-bottom:6px; letter-spacing:0.5px;">
-                                    ★ ABOUT BCWA ★
-                                </div>
-                                <div style="font-size:8.5px; color:#475569; text-align:center; line-height:1.3; margin-bottom:8px; font-weight:500;">
-                                    Boisar Chemist Welfare Association (BCWA) is dedicated to the welfare, growth and unity of chemists and medical store owners.
-                                </div>
-                            </div>
-
-                            <div style="display:flex; flex-direction:column; gap:6px; font-size:8.5px; color:#334155; font-weight:600;">
-                                <div style="display:flex; align-items:flex-start; gap:6px;">
-                                    <span style="color:#15803D;">🛡️</span>
-                                    <span>This card is non-transferable and valid only for the member store mentioned.</span>
-                                </div>
-                                <div style="display:flex; align-items:flex-start; gap:6px;">
-                                    <span style="color:#15803D;">👥</span>
-                                    <span>This card must be presented on request for verification.</span>
-                                </div>
-                                <div style="display:flex; align-items:flex-start; gap:6px;">
-                                    <span style="color:#15803D;">🤝</span>
-                                    <span>Use of this card is governed by the rules and regulations of BCWA.</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- MIDDLE COLUMN: EMERGENCY ASSISTANCE -->
-                        <div style="flex:1; padding:12px 14px; display:flex; flex-direction:column; justify-content:space-between; align-items:center; text-align:center;">
-                            <div style="font-size:9.5px; font-weight:800; color:#15803D; letter-spacing:0.5px;">
-                                —— IN CASE OF EMERGENCY / ASSISTANCE ——
-                            </div>
-
-                            <div style="display:flex; flex-direction:column; gap:4px; font-size:9px; color:#0A1E3F; font-weight:700; margin-top:4px;">
-                                <div style="display:flex; align-items:center; gap:6px; justify-content:center;">
-                                    <span style="background:#0A1E3F; color:#FFF; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:9px;">📞</span>
-                                    <span>BCWA HELPLINE : <strong>+91 99707 87878</strong></span>
-                                </div>
-                                <div style="display:flex; align-items:center; gap:6px; justify-content:center;">
-                                    <span style="background:#0A1E3F; color:#FFF; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:9px;">🌐</span>
-                                    <span>www.bcwa.in</span>
-                                </div>
-                                <div style="display:flex; align-items:center; gap:6px; justify-content:center;">
-                                    <span style="background:#0A1E3F; color:#FFF; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:9px;">✉️</span>
-                                    <span>info@bcwa.in</span>
-                                </div>
-                            </div>
-
-                            <!-- SIGNATURE -->
-                            <div style="margin-top:8px; display:flex; flex-direction:column; align-items:center;">
-                                <svg width="100" height="24" viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M5 18C15 5 25 22 40 8C55 -6 65 20 85 12C90 10 95 15 90 20" stroke="#0A1E3F" stroke-width="2" stroke-linecap="round"/>
-                                </svg>
-                                <div style="height:1px; width:110px; background:#94A3B8; margin-top:2px;"></div>
-                                <div style="font-size:8px; font-weight:700; color:#475569; margin-top:2px;">Authorised Signatory<br>BCWA</div>
-                            </div>
-                        </div>
-
-                        <!-- RIGHT COLUMN: NAVY ARC SIDEBAR -->
-                        <div style="width:25%; background:linear-gradient(135deg, #0A1E3F 0%, #0F2C59 100%); border-top-left-radius:50px 100%; border-bottom-left-radius:50px 100%; border-left:4px solid #D4AF37; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px; color:#FFF; text-align:center;">
-                            <div style="font-size:22px; font-weight:900; color:#FFF; letter-spacing:1px;">BCWA</div>
-                            <div style="font-size:7px; font-weight:700; color:#93C5FD; margin-top:2px; line-height:1.2;">BOISAR CHEMIST WELFARE ASSOCIATION</div>
-                            <div style="color:#D4AF37; font-size:12px; margin-top:6px;">★</div>
-                        </div>
-
+                    <div style="border-top:1px solid #334155; padding-top:8px; font-size:10px; color:#64748b; text-align:center;">
+                        Issued by Boisar Chemist Welfare Association (BCWA) &bull; Palghar, Maharashtra
                     </div>
-
                 </div>
-
             </div>
-            <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
-                <span class="text-secondary" style="font-size:12px;">Official BCWA Member Identity Card (Front & Back)</span>
-                <div style="display:flex; gap:10px;">
-                    <button class="btn btn-secondary" onclick="closeModal('modal-bcwa-smart-card')">Close</button>
-                    <button class="btn btn-primary" onclick="window.print()">
-                        <i data-lucide="printer" style="width:14px;"></i>
-                        <span>Print Smart Card</span>
-                    </button>
-                </div>
+            <div class="modal-footer" style="border-top:1px solid #334155; padding-top:12px; margin-top:16px; display:flex; justify-content:space-between;">
+                <button class="btn btn-secondary" onclick="closeModal('modal-smart-card')">Close</button>
+                <button class="btn btn-primary" onclick="window.print()" style="background:#38bdf8; color:#0f172a; font-weight:600; border:none; padding:8px 16px; border-radius:8px;">Print Card</button>
             </div>
         </div>
     </div>

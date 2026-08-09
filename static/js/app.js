@@ -704,7 +704,6 @@ const BCWAApp = {
                             <span class="badge ${badgeClass}">${st.compliance_score}% &bull; ${st.compliance_status}</span>
                         </td>
                         <td>
-                            <button class="btn btn-outline-primary btn-sm" style="color:#0A1E3F; border-color:#0A1E3F; font-weight:700;" onclick="BCWAApp.openBcwaSmartCard('${st.id}')">🪪 Smart Card</button>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.openStoreProfile('${st.id}')">Profile</button>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.editStore('${st.id}')">Edit</button>
                             <button class="btn btn-danger btn-sm" onclick="BCWAApp.deleteStore('${st.id}')">Delete</button>
@@ -1188,15 +1187,14 @@ const BCWAApp = {
                     <span class="badge ${badgeClass}" style="font-size:14px; padding:6px 12px;">${st.compliance_score}% &bull; ${st.compliance_status}</span>
                 </div>
 
-                <div style="display:flex; gap:16px; background:#F8FAFC; padding:16px; border-radius:8px; margin-bottom:20px; border:1px solid #E5E7EB;">
+                <div style="background:#F8FAFC; padding:16px; border-radius:12px; margin-bottom:20px; border:1px solid #E5E7EB; display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <small class="text-secondary" style="display:block; margin-bottom:4px;">Profile QR Code</small>
-                        <img src="/api/qrcode/${st.id}" alt="QR" width="120" height="120">
+                        <h4 style="margin:0; font-size:15px; color:#0F172A; font-weight:600;">🪪 BCWA Smart Member Card</h4>
+                        <small class="text-secondary">Official digital chemist membership card for ${st.store_name}</small>
                     </div>
-                    <div style="flex:1;">
-                        <small class="text-secondary" style="display:block; margin-bottom:4px;">Physical File Barcode</small>
-                        <img src="/api/barcode/${st.id}" alt="Barcode" width="220" height="70">
-                    </div>
+                    <button class="btn btn-primary" onclick="BCWAApp.openSmartCardModal('${st.id}')" style="background:#2563eb; color:#fff; padding:8px 16px; border-radius:8px; font-weight:600;">
+                        <i data-lucide="credit-card" style="width:16px; height:16px; vertical-align:middle;"></i> View Smart Card
+                    </button>
                 </div>
 
                 <div class="card mb-3 p-3">
@@ -1605,37 +1603,18 @@ const BCWAApp = {
         window.open(`/api/reports/generate?report_type=Medical Store Profile PDF&store_id=${storeId}`, '_blank');
     },
 
-    async openBcwaSmartCard(storeId) {
-        let store = this.storesCache ? this.storesCache.find(s => s.id === storeId || s.shop_code === storeId) : null;
-        if (!store) {
-            try {
-                const res = await fetch(`/api/stores/${storeId}`);
-                if (res.ok) store = await res.json();
-            } catch (e) {
-                console.error('Failed fetching store for Smart Card:', e);
-            }
-        }
+    openSmartCardModal(storeId) {
+        const store = (this.stores || []).find(s => s.id === storeId || s.shop_code === storeId);
         if (!store) return;
-
-        document.getElementById('sc-store-name').textContent = store.store_name || store.storeName || 'DISHA MEDICAL STORES';
-        document.getElementById('sc-owner-name').textContent = store.owner_name || store.ownerName || 'VINAYAK BHOSALE';
-        document.getElementById('sc-owner-contact').textContent = store.owner_mobile || store.ownerMobile || store.contact_phone || '+91 98765 43210';
-        document.getElementById('sc-store-id').textContent = store.id || 'MS-1271';
-        document.getElementById('sc-shop-code').textContent = store.shop_code || store.shopCode || store.firm_id || 'BCWA-BSR-974';
-        
-        const addr = store.address || store.address_line1 || 'Shop No. 7, Sai Plaza, Near Boisar Station, Boisar (West), Tal. Palghar, Dist. Palghar, Maharashtra - 401501';
-        document.getElementById('sc-store-address').textContent = addr;
-
-        const createdDate = store.created_at || store.createdAt || new Date().toISOString();
-        try {
-            const d = new Date(createdDate);
-            const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
-            document.getElementById('sc-issue-date').textContent = dateStr;
-        } catch (e) {
-            document.getElementById('sc-issue-date').textContent = '09 AUG 2026';
-        }
-
-        openModal('modal-bcwa-smart-card');
+        document.getElementById('card-store-name').innerText = store.store_name || store.storeName || '-';
+        document.getElementById('card-owner-name').innerText = store.owner_name || store.ownerName || '-';
+        document.getElementById('card-store-id').innerText = store.id || store.shop_code || '-';
+        document.getElementById('card-owner-mobile').innerText = store.owner_mobile || store.ownerMobile || '-';
+        document.getElementById('card-dl-20b').innerText = store.dl_20b_number || store.dl20b || '-';
+        document.getElementById('card-dl-21b').innerText = store.dl_21b_number || store.dl21b || '-';
+        document.getElementById('card-dl-expiry').innerText = store.dl_expiry_date || store.dlExpiry || '-';
+        document.getElementById('card-fssai').innerText = store.fssai_number || store.fssaiNumber || '-';
+        openModal('modal-smart-card');
     }
 };
 
