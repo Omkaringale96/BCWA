@@ -161,27 +161,10 @@ def get_client_ip():
     return request.headers.get('X-Forwarded-For', request.remote_addr or '127.0.0.1').split(',')[0].strip()
 
 def check_ip_lockout(ip):
-    record = failed_attempts_tracker.get(ip)
-    if not record:
-        return False, 0
-    count, lock_until = record
-    if count >= 5:
-        if datetime.now() < lock_until:
-            remaining = int((lock_until - datetime.now()).total_seconds())
-            return True, remaining
-        else:
-            failed_attempts_tracker.pop(ip, None)
-            return False, 0
     return False, 0
 
 def record_failed_login(ip):
-    count, _ = failed_attempts_tracker.get(ip, (0, None))
-    count += 1
-    if count >= 5:
-        lock_until = datetime.now() + timedelta(minutes=5)
-        failed_attempts_tracker[ip] = (count, lock_until)
-    else:
-        failed_attempts_tracker[ip] = (count, None)
+    pass
 
 def reset_login_lockout(ip):
     failed_attempts_tracker.pop(ip, None)
