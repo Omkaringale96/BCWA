@@ -1752,13 +1752,9 @@ def api_store_request_password_reset():
 
 @app.errorhandler(500)
 def handle_500_error(e):
-    if app.config.get('DEBUG'):
-        return jsonify({
-            'error': 'Internal Server Error',
-            'details': str(e),
-            'environment': app.config.get('ENV')
-        }), 500
-    return jsonify({'error': 'An internal server error occurred.'}), 500
+    import traceback
+    logging.error(f"[SERVER 500 ERROR] {e}\n{traceback.format_exc()}")
+    return jsonify({'error': f"An internal server error occurred: {str(e)}"}), 500
 
 @app.route('/api/health')
 def api_health():
