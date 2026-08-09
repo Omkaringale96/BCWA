@@ -674,27 +674,56 @@ def delete_medical_store(store_id):
 
 def get_pharmacists(query=None, store_id=None, page=None, limit=25):
     pharmacists = db_table('pharmacists').select('*').order('created_at', desc=True).execute().data or []
-    stores = db_table('medical_stores').select('id, store_name, shop_code').execute().data or []
-    store_map = {s['id']: s for s in stores}
+    stores = db_table('medical_stores').select('id, store_name, storeName, shop_code, shopCode').execute().data or []
+    store_map = {}
+    for s in stores:
+        s_id = s.get('id')
+        s_code = s.get('shop_code') or s.get('shopCode')
+        if s_id: store_map[s_id] = s
+        if s_code: store_map[s_code] = s
 
     result = []
     for p in pharmacists:
-        if store_id and p.get('store_id') != store_id:
-            continue
+        p_store_id = p.get('store_id') or p.get('storeId')
+        p_shop_code = p.get('shop_code') or p.get('shopCode')
+
+        if store_id:
+            s_clean = store_id.strip().upper()
+            match_store = (
+                (p_store_id and p_store_id.strip().upper() == s_clean) or
+                (p_shop_code and p_shop_code.strip().upper() == s_clean)
+            )
+            if not match_store:
+                continue
 
         p_copy = dict(p)
-        st = store_map.get(p.get('store_id'))
-        p_copy['store_name'] = st.get('store_name') if st else None
-        p_copy['shop_code'] = st.get('shop_code') if st else None
+        st = store_map.get(p_store_id) or store_map.get(p_shop_code)
+        
+        resolved_name = p.get('full_name') or p.get('fullName') or 'Pharmacist'
+        resolved_store_name = p.get('store_name') or p.get('storeName') or (st.get('store_name') or st.get('storeName') if st else 'Medical Store')
+        resolved_shop_code = p_shop_code or (st.get('shop_code') or st.get('shopCode') if st else None)
+
+        p_copy['full_name'] = resolved_name
+        p_copy['fullName'] = resolved_name
+        p_copy['store_name'] = resolved_store_name
+        p_copy['storeName'] = resolved_store_name
+        p_copy['shop_code'] = resolved_shop_code
+        p_copy['shopCode'] = resolved_shop_code
+        p_copy['mspc_number'] = p.get('mspc_number') or p.get('mspcNumber') or ''
+        p_copy['mspcNumber'] = p_copy['mspc_number']
+        p_copy['ppp_number'] = p.get('ppp_number') or p.get('pppNumber') or ''
+        p_copy['pppNumber'] = p_copy['ppp_number']
+        p_copy['ppp_expiry'] = p.get('ppp_expiry') or p.get('pppExpiry') or ''
+        p_copy['pppExpiry'] = p_copy['ppp_expiry']
 
         if query:
             q = query.strip().lower()
             match = (
-                q in p_copy.get('full_name', '').lower() or
-                q in p_copy.get('mspc_number', '').lower() or
-                q in p_copy.get('ppp_number', '').lower() or
-                q in p_copy.get('mobile', '').lower() or
-                (p_copy.get('store_name') and q in p_copy.get('store_name').lower())
+                q in resolved_name.lower() or
+                q in p_copy['mspc_number'].lower() or
+                q in p_copy['ppp_number'].lower() or
+                q in str(p_copy.get('mobile', '')).lower() or
+                (resolved_store_name and q in resolved_store_name.lower())
             )
             if not match:
                 continue
@@ -725,25 +754,59 @@ def save_pharmacist(data):
         is_new = True
         ph_id = f"PH-{random.randint(1000, 9999)}"
 
+    full_name = (data.get('full_name') or data.get('fullName') or '').strip()
+    mspc = (data.get('mspc_number') or data.get('mspcNumber') or '').strip()
+    ppp = (data.get('ppp_number') or data.get('pppNumber') or '').strip()
+    ppp_exp = data.get('ppp_expiry') or data.get('pppExpiry') or data.get('ppp_expiry_date')
+    reg_exp = data.get('reg_expiry') or data.get('regExpiry') or data.get('reg_expiry_date') or ppp_exp
+    joining = data.get('joining_date') or data.get('joiningDate') or None
+    qual = data.get('qualification') or 'B.Pharm'
+    store_id = data.get('store_id') or data.get('storeId')
+
+    # Resolve store details
+    store_name = data.get('store_name') or data.get('storeName') or ''
+    shop_code = data.get('shop_code') or data.get('shopCode') or ''
+    if store_id and (not store_name or not shop_code):
+        try:
+            s_res = db_table('medical_stores').select('store_name, storeName, shop_code, shopCode').eq('id', store_id).execute()
+            if s_res.data:
+                s_info = s_res.data[0]
+                store_name = store_name or s_info.get('store_name') or s_info.get('storeName') or ''
+                shop_code = shop_code or s_info.get('shop_code') or s_info.get('shopCode') or ''
+        except Exception:
+            pass
+
     dups = check_duplicates(
-        ppp=data.get('ppp_number'),
-        mspc=data.get('mspc_number'),
+        ppp=ppp,
+        mspc=mspc,
         exclude_id=ph_id if not is_new else None
     )
 
     record = {
         'id': ph_id,
-        'store_id': data.get('store_id'),
-        'full_name': data.get('full_name'),
+        'store_id': store_id,
+        'storeId': store_id,
+        'shop_code': shop_code,
+        'shopCode': shop_code,
+        'full_name': full_name,
+        'fullName': full_name,
+        'store_name': store_name,
+        'storeName': store_name,
+        'qualification': qual,
         'photo': data.get('photo', ''),
-        'mspc_number': data.get('mspc_number'),
-        'ppp_number': data.get('ppp_number'),
-        'ppp_expiry': data.get('ppp_expiry'),
-        'reg_expiry': data.get('reg_expiry', data.get('ppp_expiry')),
-        'joining_date': data.get('joining_date') or None,
+        'mspc_number': mspc,
+        'mspcNumber': mspc,
+        'ppp_number': ppp,
+        'pppNumber': ppp,
+        'ppp_expiry': ppp_exp,
+        'pppExpiry': ppp_exp,
+        'reg_expiry': reg_exp,
+        'regExpiry': reg_exp,
+        'joining_date': joining,
+        'joiningDate': joining,
         'leaving_date': data.get('leaving_date') or None,
         'mobile': data.get('mobile'),
-        'email': data.get('email', ''),
+        'email': data.get('email', 'ph@bcwa.org'),
         'status': data.get('status', 'Active'),
         'ppp_card_url': data.get('ppp_card_url', ''),
         'degree_cert_url': data.get('degree_cert_url', ''),
@@ -754,10 +817,10 @@ def save_pharmacist(data):
     if is_new:
         record['created_at'] = now_str
         db_table('pharmacists').insert(record).execute()
-        log_activity("Office Staff", "Pharmacist Added", f"Added Pharmacist: {data.get('full_name')} ({data.get('mspc_number')})", data.get('store_id'))
+        log_activity("Office Staff", "Pharmacist Added", f"Added Pharmacist: {full_name} ({mspc})", store_id)
     else:
         db_table('pharmacists').update(record).eq('id', ph_id).execute()
-        log_activity("Office Staff", "Pharmacist Updated", f"Updated Pharmacist: {data.get('full_name')}", data.get('store_id'))
+        log_activity("Office Staff", "Pharmacist Updated", f"Updated Pharmacist: {full_name}", store_id)
 
     try:
         import threading
@@ -782,26 +845,46 @@ def transfer_pharmacist(pharmacist_id, new_store_id, joining_date=None):
         return False
     p = p_res.data[0]
 
-    s_res = db_table('medical_stores').select('store_name').eq('id', new_store_id).execute()
-    new_store_name = s_res.data[0].get('store_name') if s_res.data else "New Store"
+    # Resolve new store details (dual-cased)
+    s_res = db_table('medical_stores').select('store_name, storeName, shop_code, shopCode').eq('id', new_store_id).execute()
+    new_store_name = "New Store"
+    new_shop_code = ""
+    if s_res.data:
+        si = s_res.data[0]
+        new_store_name = si.get('store_name') or si.get('storeName') or "New Store"
+        new_shop_code = si.get('shop_code') or si.get('shopCode') or ''
 
-    old_s_res = db_table('medical_stores').select('store_name').eq('id', p.get('store_id', '')).execute()
-    old_store_name = old_s_res.data[0].get('store_name') if old_s_res.data else "Unassigned"
+    old_store_id = p.get('store_id') or p.get('storeId') or ''
+    old_s_res = db_table('medical_stores').select('store_name, storeName').eq('id', old_store_id).execute() if old_store_id else None
+    old_store_name = "Unassigned"
+    if old_s_res and old_s_res.data:
+        old_store_name = old_s_res.data[0].get('store_name') or old_s_res.data[0].get('storeName') or "Unassigned"
 
+    jd = joining_date or today_str
     db_table('pharmacists').update({
         'store_id': new_store_id,
+        'storeId': new_store_id,
+        'store_name': new_store_name,
+        'storeName': new_store_name,
+        'shop_code': new_shop_code,
+        'shopCode': new_shop_code,
         'leaving_date': today_str,
-        'joining_date': joining_date or today_str,
+        'joining_date': jd,
+        'joiningDate': jd,
         'updated_at': now_str
     }).eq('id', pharmacist_id).execute()
 
-    log_activity("Office Staff", "Pharmacist Transferred", f"Transferred Pharmacist {p.get('full_name')} from {old_store_name} to {new_store_name}", new_store_id)
+    ph_name = p.get('full_name') or p.get('fullName') or pharmacist_id
+    log_activity("Office Staff", "Pharmacist Transferred", f"Transferred Pharmacist {ph_name} from {old_store_name} to {new_store_name}", new_store_id)
     return True
 
 def delete_pharmacist(pharmacist_id):
-    p_res = db_table('pharmacists').select('full_name, store_id').eq('id', pharmacist_id).execute()
-    name = p_res.data[0].get('full_name') if p_res.data else pharmacist_id
-    store_id = p_res.data[0].get('store_id') if p_res.data else None
+    p_res = db_table('pharmacists').select('full_name, fullName, store_id, storeId').eq('id', pharmacist_id).execute()
+    name = pharmacist_id
+    store_id = None
+    if p_res.data:
+        name = p_res.data[0].get('full_name') or p_res.data[0].get('fullName') or pharmacist_id
+        store_id = p_res.data[0].get('store_id') or p_res.data[0].get('storeId')
 
     db_table('pharmacists').delete().eq('id', pharmacist_id).execute()
     log_activity("Office Staff", "Pharmacist Deleted", f"Deleted Pharmacist record: {name}", store_id)
