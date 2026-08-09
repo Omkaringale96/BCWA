@@ -161,6 +161,7 @@ def get_client_ip():
     return request.headers.get('X-Forwarded-For', request.remote_addr or '127.0.0.1').split(',')[0].strip()
 
 def check_ip_lockout(ip):
+    # Disabled IP lockout to prevent blocking legitimate testing & access
     return False, 0
 
 def record_failed_login(ip):

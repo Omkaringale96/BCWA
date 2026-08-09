@@ -1290,10 +1290,16 @@ def create_or_update_store_account(firm_id, password, store_id, owner_name, stor
     pwd_hash = generate_password_hash(password)
     record = {
         'firm_id': firm_id.strip().upper(),
+        'firmId': firm_id.strip().upper(),
         'password_hash': pwd_hash,
+        'initial_password': password,
+        'initialPassword': password,
         'store_id': store_id,
+        'storeId': store_id,
         'owner_name': owner_name,
+        'ownerName': owner_name,
         'store_name': store_name,
+        'storeName': store_name,
         'email': email,
         'mobile': mobile,
         'status': status,
