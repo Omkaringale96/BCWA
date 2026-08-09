@@ -663,12 +663,74 @@ def save_medical_store(data):
     return {'id': store_id, 'firm_id': firm_id, 'shop_code': shop_code, 'warnings': dups}
 
 def delete_medical_store(store_id):
-    res = db_table('medical_stores').select('store_name').eq('id', store_id).execute()
-    name = res.data[0].get('store_name') if res.data else store_id
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    db_table('medical_stores').delete().eq('id', store_id).execute()
-    db_table('pharmacists').update({'store_id': None}).eq('store_id', store_id).execute()
-    log_activity("Administrator", "Store Deleted", f"Deleted Medical Store: {name}", store_id)
+    # 1. Resolve store name and details
+    s_res = db_table('medical_stores').select('store_name, storeName, shop_code, shopCode').eq('id', store_id).execute()
+    store_name = store_id
+    shop_code = ""
+    if s_res.data:
+        si = s_res.data[0]
+        store_name = si.get('store_name') or si.get('storeName') or store_id
+        shop_code = si.get('shop_code') or si.get('shopCode') or ""
+
+    # 2. Delete store document from all possible Firestore collections
+    for col in ['medical_stores', 'stores', 'medicalStores', 'pharmacies', 'medical_store']:
+        try:
+            db_table(col).delete().eq('id', store_id).execute()
+            if shop_code:
+                db_table(col).delete().eq('shop_code', shop_code).execute()
+                db_table(col).delete().eq('shopCode', shop_code).execute()
+        except Exception as e_del:
+            logging.warning(f"[DELETE STORE COLLECTION WARNING {col}] {e_del}")
+
+    # 3. Direct Firestore document delete by document ID if Firebase SDK active
+    try:
+        from firebase_client import get_firebase_db
+        db = get_firebase_db()
+        if db:
+            for col in ['medical_stores', 'stores', 'medicalStores', 'pharmacies']:
+                try:
+                    db.collection(col).document(store_id).delete()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # 4. Unassign any pharmacists currently assigned to this store
+    try:
+        # Fetch pharmacists assigned by store_id or shop_code
+        ph_list = get_pharmacists(store_id=store_id)
+        if isinstance(ph_list, dict):
+            ph_list = ph_list.get('pharmacists', [])
+        
+        for ph in ph_list:
+            ph_id = ph.get('id')
+            if ph_id:
+                db_table('pharmacists').update({
+                    'store_id': '',
+                    'storeId': '',
+                    'store_name': '',
+                    'storeName': '',
+                    'shop_code': '',
+                    'shopCode': '',
+                    'assignment_status': 'Unassigned',
+                    'assignmentStatus': 'Unassigned',
+                    'updated_at': now_str
+                }).eq('id', ph_id).execute()
+    except Exception as e_ph:
+        logging.warning(f"[DELETE STORE PHARMACIST UNASSIGN WARNING] {e_ph}")
+
+    # 5. Delete associated store documents from vault
+    try:
+        db_table('documents').delete().eq('store_id', store_id).execute()
+        if shop_code:
+            db_table('documents').delete().eq('shop_code', shop_code).execute()
+    except Exception as e_doc:
+        logging.warning(f"[DELETE STORE VAULT DOCS WARNING] {e_doc}")
+
+    # 6. Log Activity
+    log_activity("Super Admin", "Store Deleted", f"Permanently deleted Medical Store: {store_name} ({store_id})", store_id)
     cache_clear()
     return True
 

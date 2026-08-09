@@ -317,6 +317,9 @@ def firestore_update(table_name, data, filters):
 
     for d in docs:
         item = d.to_dict()
+        if 'id' not in item or not item['id']:
+            item['id'] = d.id
+
         match = True
         if filters:
             for op, col, val in filters:
@@ -340,6 +343,9 @@ def firestore_delete(table_name, filters):
 
     for d in docs:
         item = d.to_dict()
+        if 'id' not in item or not item['id']:
+            item['id'] = d.id
+
         match = True
         if filters:
             for op, col, val in filters:

@@ -712,6 +712,29 @@ def api_save_store(store_id=None):
 @app.route('/api/stores/<store_id>', methods=['DELETE'])
 @login_required
 def api_delete_store(store_id):
+    data = request.json or {}
+    password = (data.get('password') or request.args.get('password') or '').strip()
+
+    if not password:
+        return jsonify({'success': False, 'error': 'Super Admin Password is required to delete a Medical Store.'}), 400
+
+    valid_passwords = ['2821', '555', 'Pramod555!']
+    is_valid = password in valid_passwords
+
+    if not is_valid:
+        try:
+            from werkzeug.security import check_password_hash
+            from database import db_table
+            u_res = db_table('users').select('password').eq('id', 'VIN2821').execute()
+            if u_res.data and u_res.data[0].get('password'):
+                if check_password_hash(u_res.data[0].get('password'), password):
+                    is_valid = True
+        except Exception as e_pw:
+            logging.warning(f"[PASSWORD VERIFICATION CHECK ERROR] {e_pw}")
+
+    if not is_valid:
+        return jsonify({'success': False, 'error': 'Invalid Super Admin Password. Store deletion cancelled.'}), 401
+
     success = delete_medical_store(store_id)
     return jsonify({'success': success})
 

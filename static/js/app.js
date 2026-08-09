@@ -706,7 +706,7 @@ const BCWAApp = {
                         <td>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.openStoreProfile('${st.id}')">Profile</button>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.editStore('${st.id}')">Edit</button>
-                            <button class="btn btn-danger btn-sm" onclick="BCWAApp.deleteStore('${st.id}')">Delete</button>
+                            <button class="btn btn-danger btn-sm" onclick="BCWAApp.deleteStore('${st.id}', '${(st.store_name || st.storeName || '').replace(/'/g, "\\'")}')">Delete</button>
                         </td>
                     </tr>
                 `;
@@ -1235,7 +1235,7 @@ const BCWAApp = {
 
                 <div style="display:flex; gap:12px; margin-top:20px;">
                     <button class="btn btn-primary" onclick="BCWAApp.generateProfilePDF('${st.id}')">Download Profile PDF</button>
-                    <button class="btn btn-danger" onclick="BCWAApp.deleteStore('${st.id}')">Delete Store</button>
+                    <button class="btn btn-danger" onclick="BCWAApp.deleteStore('${st.id}', '${(st.store_name || st.storeName || '').replace(/'/g, "\\'")}')">Delete Store</button>
                 </div>
             `;
 
@@ -1450,16 +1450,29 @@ const BCWAApp = {
         openModal('modal-store');
     },
 
-    async deleteStore(id) {
-        if (!confirm('Are you sure you want to delete this Medical Store record?')) return;
+    async deleteStore(id, storeName = '') {
+        const targetLabel = storeName ? `${storeName} (${id})` : id;
+        const password = prompt(`SECURITY VERIFICATION REQUIRED\n\nEnter Super Admin Password to permanently delete ${targetLabel} from ALL databases:`);
+        if (password === null) return; // User cancelled
+        const cleanPw = password.trim();
+        if (!cleanPw) {
+            alert('Super Admin Password is required to delete a Medical Store.');
+            return;
+        }
+
         try {
-            const res = await fetch(`/api/stores/${id}`, { method: 'DELETE' });
+            const res = await fetch(`/api/stores/${id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: cleanPw })
+            });
             const data = await res.json();
             if (data.success) {
                 if (typeof closeDrawer === 'function') closeDrawer('drawer-store-profile');
                 this.loadMedicalStores();
                 this.loadDashboardStats();
-                if (typeof this.showToast === 'function') this.showToast('Medical Store deleted successfully', 'success');
+                if (typeof this.showToast === 'function') this.showToast(`Medical Store ${targetLabel} deleted successfully from all databases`, 'success');
+                else alert(`Medical Store ${targetLabel} deleted successfully from all databases`);
             } else {
                 alert(data.error || 'Failed to delete Medical Store');
             }
