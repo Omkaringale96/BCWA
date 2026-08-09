@@ -1461,20 +1461,20 @@ const BCWAApp = {
         }
 
         try {
-            const res = await fetch(`/api/stores/${id}`, {
+            const res = await fetch(`/api/stores/${id}?password=${encodeURIComponent(cleanPw)}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password: cleanPw })
             });
             const data = await res.json();
-            if (data.success) {
+            if (data && data.success) {
                 if (typeof closeDrawer === 'function') closeDrawer('drawer-store-profile');
                 this.loadMedicalStores();
                 this.loadDashboardStats();
                 if (typeof this.showToast === 'function') this.showToast(`Medical Store ${targetLabel} deleted successfully from all databases`, 'success');
                 else alert(`Medical Store ${targetLabel} deleted successfully from all databases`);
             } else {
-                alert(data.error || 'Failed to delete Medical Store');
+                alert((data && data.error) ? data.error : 'Failed to delete Medical Store');
             }
         } catch (e) {
             console.error('Error deleting store:', e);
