@@ -1469,23 +1469,47 @@ const BCWAApp = {
         }
     },
 
-    openAddPharmacistModal() {
+    async openAddPharmacistModal() {
         document.getElementById('form-pharmacist').reset();
         document.getElementById('ph-form-id').value = '';
 
         const select = document.getElementById('ph-form-store-id');
-        select.innerHTML = '<option value="">-- Select Store --</option>' +
-            this.storesCache.map(s => `<option value="${s.id}">${s.store_name} (${s.shop_code})</option>`).join('');
+        select.innerHTML = '<option value="">-- Select Store --</option>';
+
+        try {
+            const res = await fetch('/api/stores?limit=500');
+            const data = await res.json();
+            const stores = data.items || data.stores || this.storesCache || [];
+            select.innerHTML = '<option value="">-- Select Store --</option>' +
+                stores.map(s => `<option value="${s.id}">${s.store_name || s.storeName} (${s.shop_code || s.shopCode || s.id})</option>`).join('');
+        } catch (e) {
+            console.error('Error loading stores for dropdown:', e);
+            if (this.storesCache && this.storesCache.length > 0) {
+                select.innerHTML = '<option value="">-- Select Store --</option>' +
+                    this.storesCache.map(s => `<option value="${s.id}">${s.store_name || s.storeName} (${s.shop_code || s.shopCode || s.id})</option>`).join('');
+            }
+        }
 
         openModal('modal-pharmacist');
     },
 
-    openTransferModal(phId, phName) {
+    async openTransferModal(phId, phName) {
         document.getElementById('transfer-ph-id').value = phId;
         document.getElementById('transfer-ph-name').textContent = phName;
 
         const select = document.getElementById('transfer-new-store-id');
-        select.innerHTML = this.storesCache.map(s => `<option value="${s.id}">${s.store_name} (${s.shop_code})</option>`).join('');
+        select.innerHTML = '<option value="">-- Loading Stores... --</option>';
+
+        let stores = this.storesCache || [];
+        try {
+            const res = await fetch('/api/stores?limit=500');
+            const data = await res.json();
+            stores = data.items || data.stores || stores;
+        } catch (e) {
+            console.error('Error loading stores for transfer dropdown:', e);
+        }
+
+        select.innerHTML = stores.map(s => `<option value="${s.id}">${s.store_name || s.storeName} (${s.shop_code || s.shopCode || s.id})</option>`).join('');
 
         openModal('modal-transfer-pharmacist');
 
