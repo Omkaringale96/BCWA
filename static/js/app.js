@@ -1603,17 +1603,55 @@ const BCWAApp = {
         window.open(`/api/reports/generate?report_type=Medical Store Profile PDF&store_id=${storeId}`, '_blank');
     },
 
+    toggleSmartCardTab(tab) {
+        const frontView = document.getElementById('smart-card-view-front');
+        const backView = document.getElementById('smart-card-view-back');
+        const btnFront = document.getElementById('btn-card-tab-front');
+        const btnBack = document.getElementById('btn-card-tab-back');
+
+        if (tab === 'back') {
+            if (frontView) frontView.style.display = 'none';
+            if (backView) backView.style.display = 'flex';
+            if (btnFront) { btnFront.style.background = 'transparent'; btnFront.style.color = '#64748B'; }
+            if (btnBack) { btnBack.style.background = '#0F172A'; btnBack.style.color = '#FFFFFF'; }
+        } else {
+            if (frontView) frontView.style.display = 'flex';
+            if (backView) backView.style.display = 'none';
+            if (btnFront) { btnFront.style.background = '#0F172A'; btnFront.style.color = '#FFFFFF'; }
+            if (btnBack) { btnBack.style.background = 'transparent'; btnBack.style.color = '#64748B'; }
+        }
+    },
+
     openSmartCardModal(storeId) {
-        const store = (this.stores || []).find(s => s.id === storeId || s.shop_code === storeId);
+        const store = (this.stores || []).find(s => s.id === storeId || s.shop_code === storeId || s.shopCode === storeId);
         if (!store) return;
-        document.getElementById('card-store-name').innerText = store.store_name || store.storeName || '-';
-        document.getElementById('card-owner-name').innerText = store.owner_name || store.ownerName || '-';
-        document.getElementById('card-store-id').innerText = store.id || store.shop_code || '-';
-        document.getElementById('card-owner-mobile').innerText = store.owner_mobile || store.ownerMobile || '-';
-        document.getElementById('card-dl-20b').innerText = store.dl_20b_number || store.dl20b || '-';
-        document.getElementById('card-dl-21b').innerText = store.dl_21b_number || store.dl21b || '-';
-        document.getElementById('card-dl-expiry').innerText = store.dl_expiry_date || store.dlExpiry || '-';
-        document.getElementById('card-fssai').innerText = store.fssai_number || store.fssaiNumber || '-';
+
+        document.getElementById('card-front-store-name').innerText = store.store_name || store.storeName || '-';
+        document.getElementById('card-front-owner-name').innerText = store.owner_name || store.ownerName || '-';
+        document.getElementById('card-front-mobile').innerText = store.owner_mobile || store.ownerMobile || '-';
+        document.getElementById('card-front-store-id').innerText = store.id || '-';
+        
+        const addr = store.address_line1 || store.address || 'Boisar, Palghar - 401501';
+        document.getElementById('card-front-address').innerText = addr;
+
+        const loginId = store.id || store.shop_code || store.shopCode || '-';
+        const initPass = store.initial_password || store.initialPassword || `${loginId.replace('-', '')}@2026`;
+        
+        document.getElementById('card-front-login-id').innerText = loginId;
+        document.getElementById('card-front-password').innerText = initPass;
+
+        this.toggleSmartCardTab('front');
+
+        const waBtn = document.getElementById('btn-card-whatsapp');
+        if (waBtn) {
+            waBtn.onclick = () => {
+                const mob = (store.owner_mobile || store.ownerMobile || '').replace(/[^0-9]/g, '');
+                const cleanMob = mob.length === 10 ? '91' + mob : mob;
+                const msg = `BCWA Smart Member Card for ${store.store_name} (${store.id})\nLogin ID: ${loginId}\nPassword: ${initPass}`;
+                window.open(`https://api.whatsapp.com/send?phone=${cleanMob}&text=${encodeURIComponent(msg)}`, '_blank');
+            };
+        }
+
         openModal('modal-smart-card');
     }
 };

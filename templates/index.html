@@ -1312,54 +1312,112 @@
                 </button>
             </div>
         </div>
-    <!-- BCWA SMART MEMBER CARD MODAL -->
+    <!-- BCWA SMART MEMBER CARD MODAL (ATM CARD FORMAT) -->
     <div class="modal-overlay" id="modal-smart-card">
-        <div class="modal-content" style="max-width:540px; background:#0f172a; color:#fff; border-radius:16px; padding:24px;">
-            <div class="modal-header" style="border-bottom:1px solid #334155; padding-bottom:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
-                <h3 style="color:#38bdf8; margin:0; font-size:18px; display:flex; align-items:center; gap:8px;">
-                    🪪 BCWA Smart Member Card
+        <div class="modal-content" style="max-width:500px; background:#FFFFFF; color:#0F172A; border-radius:20px; padding:20px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+            <!-- Header with Front/Back Toggle -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #E2E8F0; padding-bottom:12px;">
+                <h3 style="margin:0; font-size:17px; font-weight:700; color:#0F172A; display:flex; align-items:center; gap:8px;">
+                    💳 BCWA Member Card
                 </h3>
-                <button class="btn-close" onclick="closeModal('modal-smart-card')" style="color:#fff;">&times;</button>
+                <div style="display:flex; gap:4px; background:#F1F5F9; padding:3px; border-radius:8px; border:1px solid #CBD5E1;">
+                    <button id="btn-card-tab-front" onclick="BCWAApp.toggleSmartCardTab('front')" style="border:none; padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; background:#0F172A; color:#FFFFFF;">Front</button>
+                    <button id="btn-card-tab-back" onclick="BCWAApp.toggleSmartCardTab('back')" style="border:none; padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; background:transparent; color:#64748B;">Back</button>
+                </div>
             </div>
-            <div class="modal-body" style="padding:0;">
-                <!-- CARD FRONT -->
-                <div id="smart-card-front" style="background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:2px solid #38bdf8; border-radius:12px; padding:16px; margin-bottom:16px; position:relative; overflow:hidden; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:10px; margin-bottom:12px;">
-                        <div>
-                            <h4 style="color:#f8fafc; margin:0; font-size:15px; font-weight:700;">BCWA CHEMIST MEMBER CARD</h4>
-                            <span style="color:#38bdf8; font-size:10px; text-transform:uppercase; letter-spacing:1px;">BOISAR CHEMIST WELFARE ASSOCIATION</span>
+
+            <!-- ATM CARD CONTAINER (Exact 1.586 : 1 Aspect Ratio: 440px x 277px) -->
+            <div style="display:flex; justify-content:center; margin-bottom:16px;">
+                <!-- FRONT VIEW -->
+                <div id="smart-card-view-front" style="width:440px; height:277px; border-radius:14px; border:1px solid #0A2540; overflow:hidden; display:flex; flex-direction:column; background:#FFFFFF; box-shadow:0 8px 20px rgba(0,0,0,0.15); font-family:Arial, sans-serif;">
+                    <!-- Card Top Header -->
+                    <div style="background:linear-gradient(90deg, #0A2540 0%, #004D40 100%); padding:10px 14px; display:flex; align-items:center; gap:10px;">
+                        <div style="width:38px; height:38px; border-radius:50%; background:#FFFFFF; border:2px solid #00E676; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <strong style="color:#0A2540; font-size:10px; font-weight:900;">BCWA</strong>
                         </div>
-                        <span class="badge" style="background:#22c55e; color:#fff; font-size:10px; padding:4px 8px; border-radius:4px;">ACTIVE MEMBER</span>
+                        <div style="flex:1;">
+                            <h4 style="margin:0; color:#FFFFFF; font-size:14px; font-weight:800; letter-spacing:0.5px;">BCWA</h4>
+                            <div style="color:#00E676; font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">BOISAR CHEMIST WELFARE ASSOCIATION</div>
+                            <span style="display:inline-block; margin-top:2px; background:#00E676; color:#0A2540; font-size:7px; font-weight:800; padding:1px 5px; border-radius:3px;">MEDICAL STORE MEMBER CARD</span>
+                        </div>
                     </div>
-                    <div style="display:flex; gap:16px; align-items:center;">
-                        <div style="width:74px; height:74px; border-radius:50%; background:#334155; border:2px solid #38bdf8; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
-                            <img id="card-owner-photo" src="https://ui-avatars.com/api/?name=Chemist&background=38bdf8&color=fff" alt="Owner" style="width:100%; height:100%; object-fit:cover;">
+
+                    <!-- Card Body -->
+                    <div style="flex:1; padding:10px 14px; font-size:11px; color:#0F172A; display:flex; flex-direction:column; justify-content:space-between;">
+                        <div style="display:grid; grid-template-columns:90px 1fr; row-gap:4px; align-items:center;">
+                            <span style="color:#475569; font-weight:700;">🏪 STORE NAME</span>
+                            <span style="font-weight:800; color:#0F172A;">: <span id="card-front-store-name">-</span></span>
+
+                            <span style="color:#475569; font-weight:700;">👤 OWNER NAME</span>
+                            <span style="font-weight:700; color:#0F172A;">: <span id="card-front-owner-name">-</span></span>
+
+                            <span style="color:#475569; font-weight:700;">📞 CONTACT</span>
+                            <span style="font-weight:600; color:#0F172A;">: <span id="card-front-mobile">-</span></span>
+
+                            <span style="color:#475569; font-weight:700;">🆔 STORE ID</span>
+                            <div>: <span id="card-front-store-id" style="background:#0F172A; color:#FFFFFF; padding:2px 8px; border-radius:4px; font-weight:800; font-size:10px;">-</span></div>
+
+                            <span style="color:#475569; font-weight:700;">📍 ADDRESS</span>
+                            <span style="font-size:10px; color:#334155; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">: <span id="card-front-address">Boisar, Palghar - 401501</span></span>
                         </div>
-                        <div style="flex:1; font-size:12px; line-height:1.6;">
-                            <div><strong style="color:#94a3b8;">Store Name:</strong> <span id="card-store-name" style="color:#fff; font-weight:600;">-</span></div>
-                            <div><strong style="color:#94a3b8;">Owner Name:</strong> <span id="card-owner-name" style="color:#38bdf8; font-weight:600;">-</span></div>
-                            <div><strong style="color:#94a3b8;">Store ID:</strong> <code id="card-store-id" style="color:#f59e0b; background:#1e293b; padding:2px 6px; border-radius:4px;">-</code></div>
-                            <div><strong style="color:#94a3b8;">Mobile:</strong> <span id="card-owner-mobile" style="color:#e2e8f0;">-</span></div>
+
+                        <!-- Card Footer Issue Bar -->
+                        <div style="background:#0A2540; color:#FFFFFF; padding:4px 10px; border-radius:4px; display:flex; justify-content:space-between; align-items:center; font-size:9px; font-weight:700;">
+                            <span>ISSUE: <span id="card-front-issue-date">09 AUG 2026</span></span>
+                            <span style="color:#00E676;">★ MEMBER OF BCWA ★</span>
                         </div>
+                    </div>
+
+                    <!-- Bottom Credentials Strip -->
+                    <div style="background:#FFFBEB; border-top:1px solid #FDE68A; padding:4px 14px; display:flex; justify-content:space-between; align-items:center; font-size:10px;">
+                        <span style="color:#92400E; font-weight:700;">Login ID: <code id="card-front-login-id" style="color:#78350F; font-weight:800;">-</code></span>
+                        <span style="color:#92400E; font-weight:700;">Password: <code id="card-front-password" style="color:#78350F; font-weight:800;">-</code></span>
                     </div>
                 </div>
 
-                <!-- CARD BACK -->
-                <div id="smart-card-back" style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border:1px solid #334155; border-radius:12px; padding:16px; font-size:11px; color:#cbd5e1;">
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
-                        <div><strong style="color:#94a3b8;">20B License:</strong> <code id="card-dl-20b" style="color:#38bdf8;">-</code></div>
-                        <div><strong style="color:#94a3b8;">21B License:</strong> <code id="card-dl-21b" style="color:#38bdf8;">-</code></div>
-                        <div><strong style="color:#94a3b8;">DL Expiry:</strong> <span id="card-dl-expiry" style="color:#22c55e;">-</span></div>
-                        <div><strong style="color:#94a3b8;">FSSAI No:</strong> <code id="card-fssai" style="color:#f59e0b;">-</code></div>
+                <!-- BACK VIEW (Initially Hidden) -->
+                <div id="smart-card-view-back" style="width:440px; height:277px; border-radius:14px; border:1px solid #0A2540; overflow:hidden; display:none; flex-direction:column; background:#FFFFFF; box-shadow:0 8px 20px rgba(0,0,0,0.15); font-family:Arial, sans-serif;">
+                    <!-- Back Header -->
+                    <div style="background:#0A2540; color:#FFFFFF; text-align:center; padding:8px; font-size:10px; font-weight:800; letter-spacing:0.5px;">
+                        TOGETHER FOR ETHICS, HEALTH &amp; COMMUNITY WELFARE
                     </div>
-                    <div style="border-top:1px solid #334155; padding-top:8px; font-size:10px; color:#64748b; text-align:center;">
-                        Issued by Boisar Chemist Welfare Association (BCWA) &bull; Palghar, Maharashtra
+
+                    <!-- Back Body -->
+                    <div style="flex:1; padding:10px 14px; font-size:10px; color:#334155; display:flex; flex-direction:column; justify-content:space-between;">
+                        <div>
+                            <div style="text-align:center; font-weight:800; color:#0F172A; margin-bottom:4px; font-size:11px;">★ ABOUT BCWA ★</div>
+                            <p style="margin:0 0 6px 0; line-height:1.3; font-size:9.5px;">
+                                Boisar Chemist Welfare Association (BCWA) is dedicated to the welfare, growth and unity of chemists and medical store owners in Boisar and Palghar district.
+                            </p>
+                            <div style="font-size:9px; line-height:1.4; color:#475569;">
+                                &bull; This card is non-transferable &amp; valid for member store only.<br>
+                                &bull; Present on request for official association verification.
+                            </div>
+                        </div>
+
+                        <div style="border-top:1px dashed #CBD5E1; padding-top:6px; margin-top:4px;">
+                            <div style="font-weight:700; color:#0F172A; font-size:9px; margin-bottom:2px;">IN CASE OF EMERGENCY / ASSISTANCE</div>
+                            <div style="color:#0284C7; font-weight:700; font-size:9.5px;">📞 BCWA Helpline: +91 99707 87878</div>
+                            <div style="color:#475569; font-size:9px;">🌐 Website: www.bcwa.in | ✉️ info@bcwa.in</div>
+                        </div>
+
+                        <!-- Signatory -->
+                        <div style="text-align:right; border-top:1px solid #E2E8F0; padding-top:4px; margin-top:4px;">
+                            <div style="font-weight:800; color:#0F172A; font-size:10px;">Bhosale.V</div>
+                            <div style="font-size:8.5px; color:#64748B;">Authorised Signatory &ndash; BCWA</div>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="modal-footer" style="border-top:1px solid #334155; padding-top:12px; margin-top:16px; display:flex; justify-content:space-between;">
-                <button class="btn btn-secondary" onclick="closeModal('modal-smart-card')">Close</button>
-                <button class="btn btn-primary" onclick="window.print()" style="background:#38bdf8; color:#0f172a; font-weight:600; border:none; padding:8px 16px; border-radius:8px;">Print Card</button>
+
+            <!-- Footer Buttons -->
+            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #E2E8F0; padding-top:12px;">
+                <button class="btn btn-success" id="btn-card-whatsapp" style="background:#22C55E; color:#FFFFFF; font-weight:700; border:none; padding:8px 16px; border-radius:8px; display:flex; align-items:center; gap:6px;">
+                    📲 WhatsApp
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal('modal-smart-card')" style="background:#0F172A; color:#FFFFFF; font-weight:700; border:none; padding:8px 20px; border-radius:8px;">
+                    Close
+                </button>
             </div>
         </div>
     </div>
