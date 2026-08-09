@@ -704,6 +704,7 @@ const BCWAApp = {
                             <span class="badge ${badgeClass}">${st.compliance_score}% &bull; ${st.compliance_status}</span>
                         </td>
                         <td>
+                            <button class="btn btn-outline-primary btn-sm" style="color:#0A1E3F; border-color:#0A1E3F; font-weight:700;" onclick="BCWAApp.openBcwaSmartCard('${st.id}')">🪪 Smart Card</button>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.openStoreProfile('${st.id}')">Profile</button>
                             <button class="btn btn-secondary btn-sm" onclick="BCWAApp.editStore('${st.id}')">Edit</button>
                             <button class="btn btn-danger btn-sm" onclick="BCWAApp.deleteStore('${st.id}')">Delete</button>
@@ -1602,6 +1603,39 @@ const BCWAApp = {
 
     generateProfilePDF(storeId) {
         window.open(`/api/reports/generate?report_type=Medical Store Profile PDF&store_id=${storeId}`, '_blank');
+    },
+
+    async openBcwaSmartCard(storeId) {
+        let store = this.storesCache ? this.storesCache.find(s => s.id === storeId || s.shop_code === storeId) : null;
+        if (!store) {
+            try {
+                const res = await fetch(`/api/stores/${storeId}`);
+                if (res.ok) store = await res.json();
+            } catch (e) {
+                console.error('Failed fetching store for Smart Card:', e);
+            }
+        }
+        if (!store) return;
+
+        document.getElementById('sc-store-name').textContent = store.store_name || store.storeName || 'DISHA MEDICAL STORES';
+        document.getElementById('sc-owner-name').textContent = store.owner_name || store.ownerName || 'VINAYAK BHOSALE';
+        document.getElementById('sc-owner-contact').textContent = store.owner_mobile || store.ownerMobile || store.contact_phone || '+91 98765 43210';
+        document.getElementById('sc-store-id').textContent = store.id || 'MS-1271';
+        document.getElementById('sc-shop-code').textContent = store.shop_code || store.shopCode || store.firm_id || 'BCWA-BSR-974';
+        
+        const addr = store.address || store.address_line1 || 'Shop No. 7, Sai Plaza, Near Boisar Station, Boisar (West), Tal. Palghar, Dist. Palghar, Maharashtra - 401501';
+        document.getElementById('sc-store-address').textContent = addr;
+
+        const createdDate = store.created_at || store.createdAt || new Date().toISOString();
+        try {
+            const d = new Date(createdDate);
+            const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+            document.getElementById('sc-issue-date').textContent = dateStr;
+        } catch (e) {
+            document.getElementById('sc-issue-date').textContent = '09 AUG 2026';
+        }
+
+        openModal('modal-bcwa-smart-card');
     }
 };
 
