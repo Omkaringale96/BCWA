@@ -750,6 +750,17 @@ def api_transfer_pharmacist(ph_id):
     success = transfer_pharmacist(ph_id, new_store_id, joining_date)
     return jsonify({'success': success})
 
+@app.route('/api/pharmacists/<ph_id>/assign', methods=['POST'])
+@admin_required
+def api_assign_pharmacist(ph_id):
+    data = request.json or {}
+    store_id = data.get('store_id') or data.get('storeId')
+    if not store_id:
+        return jsonify({'error': 'Store ID required'}), 400
+
+    success = assign_pharmacist(ph_id, store_id)
+    return jsonify({'success': success})
+
 @app.route('/api/pharmacists/<ph_id>', methods=['DELETE'])
 @admin_required
 def api_delete_pharmacist(ph_id):

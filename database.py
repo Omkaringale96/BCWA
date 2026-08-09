@@ -702,6 +702,7 @@ def get_pharmacists(query=None, store_id=None, page=None, limit=25):
         resolved_name = p.get('full_name') or p.get('fullName') or 'Pharmacist'
         resolved_store_name = p.get('store_name') or p.get('storeName') or (st.get('store_name') or st.get('storeName') if st else 'Medical Store')
         resolved_shop_code = p_shop_code or (st.get('shop_code') or st.get('shopCode') if st else None)
+        assign_status = p.get('assignment_status') or p.get('assignmentStatus') or ('Assigned' if p_store_id else 'Unassigned')
 
         p_copy['full_name'] = resolved_name
         p_copy['fullName'] = resolved_name
@@ -715,6 +716,12 @@ def get_pharmacists(query=None, store_id=None, page=None, limit=25):
         p_copy['pppNumber'] = p_copy['ppp_number']
         p_copy['ppp_expiry'] = p.get('ppp_expiry') or p.get('pppExpiry') or ''
         p_copy['pppExpiry'] = p_copy['ppp_expiry']
+        p_copy['assignment_status'] = assign_status
+        p_copy['assignmentStatus'] = assign_status
+        p_copy['assignment_date'] = p.get('assignment_date') or p.get('assignmentDate') or ''
+        p_copy['assignmentDate'] = p_copy['assignment_date']
+        p_copy['last_transfer_date'] = p.get('last_transfer_date') or p.get('lastTransferDate') or ''
+        p_copy['lastTransferDate'] = p_copy['last_transfer_date']
 
         if query:
             q = query.strip().lower()
@@ -762,6 +769,7 @@ def save_pharmacist(data):
     joining = data.get('joining_date') or data.get('joiningDate') or None
     qual = data.get('qualification') or 'B.Pharm'
     store_id = data.get('store_id') or data.get('storeId')
+    assign_status = "Assigned" if store_id else "Unassigned"
 
     # Resolve store details
     store_name = data.get('store_name') or data.get('storeName') or ''
@@ -808,6 +816,10 @@ def save_pharmacist(data):
         'mobile': data.get('mobile'),
         'email': data.get('email', 'ph@bcwa.org'),
         'status': data.get('status', 'Active'),
+        'assignment_status': assign_status,
+        'assignmentStatus': assign_status,
+        'assignment_date': now_str if store_id else '',
+        'assignmentDate': now_str if store_id else '',
         'ppp_card_url': data.get('ppp_card_url', ''),
         'degree_cert_url': data.get('degree_cert_url', ''),
         'reg_cert_url': data.get('reg_cert_url', ''),
@@ -822,6 +834,19 @@ def save_pharmacist(data):
         db_table('pharmacists').update(record).eq('id', ph_id).execute()
         log_activity("Office Staff", "Pharmacist Updated", f"Updated Pharmacist: {full_name}", store_id)
 
+    # Update medical store profile with current pharmacist reference if assigned
+    if store_id:
+        try:
+            db_table('medical_stores').update({
+                'current_pharmacist_id': ph_id,
+                'currentPharmacistId': ph_id,
+                'current_pharmacist_name': full_name,
+                'currentPharmacistName': full_name,
+                'updated_at': now_str
+            }).eq('id', store_id).execute()
+        except Exception as e_st:
+            logging.warning(f"[STORE PHARMACIST UPDATE WARNING] {e_st}")
+
     try:
         import threading
         from notification_engine import run_reminder_engine
@@ -835,6 +860,54 @@ def save_pharmacist(data):
         pass
 
     return {'id': ph_id, 'warnings': dups}
+
+def assign_pharmacist(pharmacist_id, store_id):
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    p_res = db_table('pharmacists').select('*').eq('id', pharmacist_id).execute()
+    if not p_res.data:
+        return False
+    p = p_res.data[0]
+
+    s_res = db_table('medical_stores').select('store_name, storeName, shop_code, shopCode').eq('id', store_id).execute()
+    if not s_res.data:
+        return False
+    si = s_res.data[0]
+
+    store_name = si.get('store_name') or si.get('storeName') or "Medical Store"
+    shop_code = si.get('shop_code') or si.get('shopCode') or ''
+    full_name = p.get('full_name') or p.get('fullName') or pharmacist_id
+
+    # Update pharmacist
+    db_table('pharmacists').update({
+        'store_id': store_id,
+        'storeId': store_id,
+        'store_name': store_name,
+        'storeName': store_name,
+        'shop_code': shop_code,
+        'shopCode': shop_code,
+        'assignment_status': 'Assigned',
+        'assignmentStatus': 'Assigned',
+        'assignment_date': now_str,
+        'assignmentDate': now_str,
+        'updated_at': now_str
+    }).eq('id', pharmacist_id).execute()
+
+    # Update store reference
+    db_table('medical_stores').update({
+        'current_pharmacist_id': pharmacist_id,
+        'currentPharmacistId': pharmacist_id,
+        'current_pharmacist_name': full_name,
+        'currentPharmacistName': full_name,
+        'updated_at': now_str
+    }).eq('id', store_id).execute()
+
+    log_activity("Office Staff", "Pharmacist Assigned", f"Assigned Pharmacist {full_name} ({pharmacist_id}) to {store_name} ({store_id})", store_id)
+    try:
+        cache_clear()
+    except Exception:
+        pass
+    return True
 
 def transfer_pharmacist(pharmacist_id, new_store_id, joining_date=None):
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -861,6 +934,9 @@ def transfer_pharmacist(pharmacist_id, new_store_id, joining_date=None):
         old_store_name = old_s_res.data[0].get('store_name') or old_s_res.data[0].get('storeName') or "Unassigned"
 
     jd = joining_date or today_str
+    ph_name = p.get('full_name') or p.get('fullName') or pharmacist_id
+
+    # 1. Update pharmacist document
     db_table('pharmacists').update({
         'store_id': new_store_id,
         'storeId': new_store_id,
@@ -868,14 +944,46 @@ def transfer_pharmacist(pharmacist_id, new_store_id, joining_date=None):
         'storeName': new_store_name,
         'shop_code': new_shop_code,
         'shopCode': new_shop_code,
+        'assignment_status': 'Assigned',
+        'assignmentStatus': 'Assigned',
         'leaving_date': today_str,
         'joining_date': jd,
         'joiningDate': jd,
+        'last_transfer_date': now_str,
+        'lastTransferDate': now_str,
         'updated_at': now_str
     }).eq('id', pharmacist_id).execute()
 
-    ph_name = p.get('full_name') or p.get('fullName') or pharmacist_id
+    # 2. Clear old store current pharmacist reference
+    if old_store_id:
+        try:
+            db_table('medical_stores').update({
+                'current_pharmacist_id': '',
+                'currentPharmacistId': '',
+                'current_pharmacist_name': '',
+                'currentPharmacistName': '',
+                'updated_at': now_str
+            }).eq('id', old_store_id).execute()
+        except Exception:
+            pass
+
+    # 3. Set new store current pharmacist reference
+    try:
+        db_table('medical_stores').update({
+            'current_pharmacist_id': pharmacist_id,
+            'currentPharmacistId': pharmacist_id,
+            'current_pharmacist_name': ph_name,
+            'currentPharmacistName': ph_name,
+            'updated_at': now_str
+        }).eq('id', new_store_id).execute()
+    except Exception:
+        pass
+
     log_activity("Office Staff", "Pharmacist Transferred", f"Transferred Pharmacist {ph_name} from {old_store_name} to {new_store_name}", new_store_id)
+    try:
+        cache_clear()
+    except Exception:
+        pass
     return True
 
 def delete_pharmacist(pharmacist_id):
