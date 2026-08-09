@@ -1189,11 +1189,11 @@ const BCWAApp = {
 
                 <div style="background:#F8FAFC; padding:16px; border-radius:12px; margin-bottom:20px; border:1px solid #E5E7EB; display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <h4 style="margin:0; font-size:15px; color:#0F172A; font-weight:600;">🪪 BCWA Smart Member Card</h4>
+                        <h4 style="margin:0; font-size:15px; color:#0F172A; font-weight:700;">💳 BCWA Smart Member Card</h4>
                         <small class="text-secondary">Official digital chemist membership card for ${st.store_name}</small>
                     </div>
-                    <button class="btn btn-primary" onclick="BCWAApp.openSmartCardModal('${st.id}')" style="background:#2563eb; color:#fff; padding:8px 16px; border-radius:8px; font-weight:600;">
-                        <i data-lucide="credit-card" style="width:16px; height:16px; vertical-align:middle;"></i> View Smart Card
+                    <button class="btn btn-primary" onclick="BCWAApp.openSmartCardModal('${st.id}')" style="background:#0F172A; color:#FFFFFF; border:1px solid #38BDF8; padding:8px 18px; border-radius:8px; font-weight:700; display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <i data-lucide="badge-check" style="width:16px; height:16px; color:#38BDF8;"></i> <span>View Smart Card</span>
                     </button>
                 </div>
 
