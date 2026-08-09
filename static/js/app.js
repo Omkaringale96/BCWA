@@ -1220,17 +1220,20 @@ const BCWAApp = {
                 </div>
 
                 <div class="card mb-3 p-3">
-                    <h4 style="color:#2563EB; font-size:14px; margin-bottom:10px;">Assigned Pharmacists (${st.pharmacists ? st.pharmacists.length : 0})</h4>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <h4 style="color:#2563EB; font-size:14px; margin:0;">Assigned Pharmacists (${st.pharmacists ? st.pharmacists.length : 0})</h4>
+                        <button class="btn btn-sm btn-primary" onclick="BCWAApp.openAssignPharmacistModal('${st.id}')" style="font-size:11px; padding:4px 10px; border-radius:6px; background:#0F172A; border:1px solid #38BDF8; color:#FFF; font-weight:700;">+ Assign Pharmacist</button>
+                    </div>
                     ${st.pharmacists && st.pharmacists.length > 0 ? `
-                        <ul style="list-style:none; padding:0;">
+                        <ul style="list-style:none; padding:0; margin:0;">
                             ${st.pharmacists.map(p => `
-                                <li style="padding:6px 0; border-bottom:1px solid #E5E7EB; display:flex; justify-content:space-between;">
+                                <li style="padding:6px 0; border-bottom:1px solid #E5E7EB; display:flex; justify-content:space-between; align-items:center;">
                                     <span><strong>${p.full_name}</strong> (MSPC: ${p.mspc_number})</span>
                                     <span class="badge badge-info">PPP Exp: ${p.ppp_expiry}</span>
                                 </li>
                             `).join('')}
                         </ul>
-                    ` : '<p class="text-secondary">No active pharmacists assigned.</p>'}
+                    ` : '<div style="background:#FFF7ED; padding:10px; border-radius:6px; border:1px solid #FFEDD5; color:#C2410C; font-size:12px; font-weight:600; display:flex; justify-content:space-between; align-items:center;"><span>⚠️ No active pharmacist assigned to this store.</span><button class="btn btn-sm" onclick="BCWAApp.openAssignPharmacistModal('${st.id}')" style="background:#EA580C; color:#FFF; font-weight:700; border:none; padding:4px 10px; border-radius:4px; font-size:11px;">Assign Now</button></div>'}
                 </div>
 
                 <div style="display:flex; gap:12px; margin-top:20px;">
@@ -1504,6 +1507,14 @@ const BCWAApp = {
         }
 
         openModal('modal-pharmacist');
+    },
+
+    async openAssignPharmacistModal(targetStoreId = '') {
+        await this.openAddPharmacistModal();
+        if (targetStoreId) {
+            const select = document.getElementById('ph-form-store-id');
+            if (select) select.value = targetStoreId;
+        }
     },
 
     async openTransferModal(phId, phName) {
