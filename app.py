@@ -830,7 +830,6 @@ def api_get_documents():
     return jsonify({'documents': res})
 
 @app.route('/api/documents/upload', methods=['POST'])
-@login_required
 def api_upload_document():
     store_id = sanitize_string(request.form.get('store_id'), 50)
     category = sanitize_string(request.form.get('category', 'Other Documents'), 100)
