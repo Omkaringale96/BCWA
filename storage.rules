@@ -2,19 +2,77 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Secure Document Storage: Allow read for documents, disallow direct client writes (Server Admin SDK handles uploads)
+
+    // Helper function: Checks if request is from an authenticated user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function: Checks if user is an Authorized Admin (SuperAdmin, Admin, AssociationAdmin, Staff, or admin_vin2821)
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.uid == 'admin_vin2821' ||
+        request.auth.email == 'bhosalevinayakpsnl@gmail.com' ||
+        ('role' in request.auth.token && (
+          request.auth.token.role == 'SuperAdmin' ||
+          request.auth.token.role == 'Admin' ||
+          request.auth.token.role == 'AssociationAdmin' ||
+          request.auth.token.role == 'Staff'
+        )) ||
+        (
+          firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+          (
+            firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'SuperAdmin' ||
+            firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'Admin' ||
+            firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'AssociationAdmin' ||
+            firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'Staff' ||
+            firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == true
+          )
+        )
+      );
+    }
+
+    // Helper function: Checks if user is a Store Owner for a specific store folder
+    function isStoreOwnerFolder(storeId) {
+      return isAuthenticated() && (
+        (
+          'role' in request.auth.token &&
+          request.auth.token.role == 'StoreOwner' &&
+          'store_id' in request.auth.token &&
+          request.auth.token.store_id == storeId
+        ) || (
+          firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'StoreOwner' &&
+          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.store_id == storeId
+        )
+      );
+    }
+
+    // Match Document Vault files in /documents/
     match /documents/{allPaths=**} {
-      allow read: if true;
-      allow write: if false;
+      // ONLY authenticated users can read documents
+      allow read: if isAuthenticated();
+      // ONLY authorized admins or assigned store owners can write/upload/update/delete
+      allow write, create, update, delete: if isSuperAdmin();
     }
 
-    match /MedicalStores/{allPaths=**} {
-      allow read: if true;
-      allow write: if false;
+    // Match Store documents in /documents/{storeId}/{allPaths=**}
+    match /documents/{storeId}/{allPaths=**} {
+      // ONLY authenticated users can read documents
+      allow read: if isAuthenticated();
+      // ONLY authorized admins or assigned store owners can write/upload/update/delete
+      allow write, create, update, delete: if isSuperAdmin() || isStoreOwnerFolder(storeId);
     }
 
-    // Default deny for all other paths
+    // Match MedicalStores folder in /MedicalStores/{storeId}/{allPaths=**}
+    match /MedicalStores/{storeId}/{allPaths=**} {
+      // ONLY authenticated users can read documents
+      allow read: if isAuthenticated();
+      // ONLY authorized admins or assigned store owners can write/upload/update/delete
+      allow write, create, update, delete: if isSuperAdmin() || isStoreOwnerFolder(storeId);
+    }
+
+    // Default: Deny all unauthenticated or unauthorized access
     match /{allPaths=**} {
       allow read, write: if false;
     }
