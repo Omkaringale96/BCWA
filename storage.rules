@@ -2,8 +2,21 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    
+    // Secure Document Storage: Allow read for documents, disallow direct client writes (Server Admin SDK handles uploads)
+    match /documents/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /MedicalStores/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Default deny for all other paths
     match /{allPaths=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
