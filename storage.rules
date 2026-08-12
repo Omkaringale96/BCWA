@@ -2,36 +2,8 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isSuperAdmin() {
-      return isAuthenticated() && (
-        !('role' in request.auth.token) ||
-        request.auth.token.role == 'SuperAdmin' ||
-        request.auth.token.role == 'Admin' ||
-        request.auth.token.role == 'AssociationAdmin' ||
-        request.auth.token.role == 'Staff' ||
-        request.auth.email == 'bhosalevinayakpsnl@gmail.com'
-      );
-    }
-
-    function isStoreOwnerFolder(storeId) {
-      return isAuthenticated() &&
-        'role' in request.auth.token &&
-        request.auth.token.role == 'StoreOwner' &&
-        'store_id' in request.auth.token &&
-        request.auth.token.store_id == storeId;
-    }
-
-    match /MedicalStores/{storeId}/{allPaths=**} {
-      allow read, write, create, update, delete: if isSuperAdmin() || isStoreOwnerFolder(storeId);
-    }
-
     match /{allPaths=**} {
-      allow read, write: if isSuperAdmin();
+      allow read, write: if true;
     }
   }
 }
