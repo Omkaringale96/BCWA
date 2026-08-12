@@ -99,16 +99,13 @@ def clear_production_database():
         print(f"[SUPABASE PURGE NOTICE] {e}")
 
     # Wipe local store tables
-    from supabase_client import _mock_storage
-    _mock_storage['medical_stores'] = []
-    _mock_storage['pharmacists'] = []
-    _mock_storage['documents'] = []
-    _mock_storage['notifications'] = []
-    _mock_storage['notification_queue'] = []
-    _mock_storage['notification_logs'] = []
-    _mock_storage['activity_logs'] = []
-    _mock_storage['store_accounts'] = []
-    _mock_storage['users'] = [admin_user]
+    try:
+        from database import _MEM_STORES, _MEM_PHARMACISTS, _MEM_USERS
+        _MEM_STORES.clear()
+        _MEM_PHARMACISTS.clear()
+        _MEM_USERS.clear()
+    except Exception:
+        pass
 
     # Ensure admin user is inserted
     db_table('users').upsert(admin_user).execute()

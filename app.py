@@ -883,8 +883,8 @@ def api_upload_document():
         except Exception:
             pass
 
-    from supabase_client import STORAGE_BUCKET, resolve_storage_bucket_and_path, upload_to_supabase_storage, delete_from_supabase_storage
-    bucket_name, storage_path = resolve_storage_bucket_and_path(shop_code, category, file_name)
+    from firebase_client import DEFAULT_STORAGE_BUCKET as STORAGE_BUCKET, upload_to_firebase_storage as upload_to_supabase_storage, delete_from_firebase_storage as delete_from_supabase_storage
+    storage_path = f"MedicalStores/{shop_code}/{category}/{file_name}"
     file_url = f"/static/docs/{file_name}"
     size_kb = random.randint(150, 800)
     mime_type = file.mimetype if file and hasattr(file, 'mimetype') else 'application/pdf'
@@ -995,7 +995,7 @@ def api_preview_document(doc_id):
         if user.get('role') == 'Store' and user.get('store_id') != store_id:
             return jsonify({'error': 'Forbidden access to store documents'}), 403
 
-        from supabase_client import STORAGE_BUCKET, generate_document_preview_url, get_supabase_client
+        from firebase_client import DEFAULT_STORAGE_BUCKET as STORAGE_BUCKET, generate_firebase_preview_url as generate_document_preview_url, download_from_firebase_storage
         raw_path = target_doc.get('storage_path') or target_doc.get('file_url') or ''
         store = get_medical_store(store_id) if store_id else None
         shop_code = store.get('shop_code', 'BCWA-MED-000001') if store else 'BCWA-MED-000001'
@@ -1011,17 +1011,8 @@ def api_preview_document(doc_id):
         if not clean_path or clean_path.startswith('static/'):
             clean_path = f"MedicalStores/{shop_code}/{category}/{file_name}"
 
-        preview_url = generate_document_preview_url(clean_path, bucket_name=STORAGE_BUCKET)
-        client = get_supabase_client()
-        pdf_bytes = None
-
-        if client:
-            try:
-                res_bytes = client.storage.from_(STORAGE_BUCKET).download(clean_path)
-                if res_bytes and len(res_bytes) > 0:
-                    pdf_bytes = res_bytes
-            except Exception as e_down:
-                logging.warning(f"[PREVIEW NOTICE] Download '{clean_path}' from bucket '{STORAGE_BUCKET}' notice: {e_down}")
+        preview_url = target_doc.get('file_url') or generate_document_preview_url(clean_path, bucket_name=STORAGE_BUCKET)
+        pdf_bytes = download_from_firebase_storage(clean_path, bucket_name=STORAGE_BUCKET)
 
         log_activity(session.get('user', {}).get('name', 'User'), "Document Previewed", f"Previewed document '{file_name}' (ID: {doc_id})", store_id)
 
@@ -1094,7 +1085,7 @@ def api_download_document(doc_id):
         if user.get('role') == 'Store' and user.get('store_id') != store_id:
             return jsonify({'error': 'Forbidden access to store documents'}), 403
 
-        from supabase_client import STORAGE_BUCKET, get_supabase_client
+        from firebase_client import DEFAULT_STORAGE_BUCKET as STORAGE_BUCKET, download_from_firebase_storage
         raw_path = target_doc.get('storage_path') or target_doc.get('file_url') or ''
         file_name = target_doc.get('file_name') or 'document.pdf'
 
@@ -1103,24 +1094,22 @@ def api_download_document(doc_id):
             if clean_path.startswith(prefix):
                 clean_path = clean_path[len(prefix):]
 
-        client = get_supabase_client()
-        if client and clean_path:
-            try:
-                res_bytes = client.storage.from_(STORAGE_BUCKET).download(clean_path)
-                if res_bytes:
-                    log_activity(session.get('user', {}).get('name', 'User'), "Document Downloaded", f"Downloaded '{file_name}' from bucket '{STORAGE_BUCKET}'", store_id)
-                    return Response(
-                        res_bytes,
-                        mimetype='application/octet-stream',
-                        headers={
-                            'Content-Type': 'application/octet-stream',
-                            'Content-Disposition': f'attachment; filename="{file_name}"'
-                        }
-                    )
-            except Exception as e_down:
-                logging.warning(f"[DOWNLOAD NOTICE] Direct download failed for '{clean_path}': {e_down}")
+        res_bytes = download_from_firebase_storage(clean_path, bucket_name=STORAGE_BUCKET)
+        if res_bytes:
+            log_activity(session.get('user', {}).get('name', 'User'), "Document Downloaded", f"Downloaded '{file_name}' from Firebase Storage", store_id)
+            return Response(
+                res_bytes,
+                mimetype='application/pdf' if file_name.lower().endswith('.pdf') else 'application/octet-stream',
+                headers={
+                    'Content-Type': 'application/pdf' if file_name.lower().endswith('.pdf') else 'application/octet-stream',
+                    'Content-Disposition': f'attachment; filename="{file_name}"'
+                }
+            )
 
         file_url = target_doc.get('file_url') or '/static/docs/sample.pdf'
+        if file_url.startswith('http://') or file_url.startswith('https://'):
+            return redirect(file_url)
+
         log_activity(session.get('user', {}).get('name', 'User'), "Document Downloaded", f"Downloaded '{file_name}' via URL redirect", store_id)
         return jsonify({
             'success': True,
@@ -1158,7 +1147,7 @@ def api_update_document(doc_id):
             if not file_ok:
                 return jsonify({'success': False, 'error': file_err}), 400
 
-            from supabase_client import STORAGE_BUCKET, upload_to_supabase_storage, delete_from_supabase_storage
+            from firebase_client import DEFAULT_STORAGE_BUCKET as STORAGE_BUCKET, upload_to_firebase_storage as upload_to_supabase_storage, delete_from_firebase_storage as delete_from_supabase_storage
             old_path = target_doc.get('storage_path')
             if old_path:
                 delete_from_supabase_storage(old_path, bucket_name=STORAGE_BUCKET)
@@ -1193,7 +1182,7 @@ def api_delete_document(doc_id):
         doc_res = db_table('documents').select('*').eq('id', doc_id).execute()
         if doc_res.data:
             target_doc = doc_res.data[0]
-            from supabase_client import STORAGE_BUCKET, delete_from_supabase_storage
+            from firebase_client import DEFAULT_STORAGE_BUCKET as STORAGE_BUCKET, delete_from_firebase_storage as delete_from_supabase_storage
             old_path = target_doc.get('storage_path')
             if old_path:
                 delete_from_supabase_storage(old_path, bucket_name=STORAGE_BUCKET)

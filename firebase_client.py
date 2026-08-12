@@ -8,6 +8,7 @@ import json
 import logging
 import traceback
 from datetime import datetime
+import urllib.parse
 
 try:
     import firebase_admin
@@ -454,16 +455,21 @@ def upload_to_firebase_storage(file_obj, filename, category="Other Documents", f
         bucket = storage.bucket()
         blob = bucket.blob(file_path)
         blob.upload_from_string(content, content_type=mime_type)
+
+        encoded_path = urllib.parse.quote(file_path, safe='')
+        media_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{encoded_path}?alt=media"
+
         try:
             blob.make_public()
             preview_url = blob.public_url
         except Exception:
-            preview_url = f"https://storage.googleapis.com/{DEFAULT_STORAGE_BUCKET}/{file_path}"
+            preview_url = media_url
 
         return {
             'success': True,
-            'url': preview_url,
-            'bucket': DEFAULT_STORAGE_BUCKET,
+            'url': media_url,
+            'public_url': preview_url,
+            'bucket': bucket.name,
             'path': file_path
         }
     except Exception as e_upload:
@@ -476,9 +482,71 @@ def upload_to_firebase_storage(file_obj, filename, category="Other Documents", f
 
 upload_to_supabase_storage = upload_to_firebase_storage
 
+def download_from_firebase_storage(file_path, bucket_name=None):
+    """
+    Downloads raw file bytes from Firebase Storage.
+    Returns bytes or None if unavailable.
+    """
+    if not file_path:
+        return None
+
+    clean_path = str(file_path).lstrip('/')
+    for prefix in ['bcwa-documents/', 'documents/']:
+        if clean_path.startswith(prefix):
+            clean_path = clean_path[len(prefix):]
+
+    db = get_firebase_db()
+    if HAS_FIREBASE_SDK and db:
+        try:
+            b_name = bucket_name or DEFAULT_STORAGE_BUCKET
+            bucket = storage.bucket(b_name)
+            blob = bucket.blob(clean_path)
+            if blob.exists():
+                return blob.download_as_bytes()
+        except Exception as e:
+            logging.warning(f"[FIREBASE DOWNLOAD WARNING] Could not download '{clean_path}' from bucket: {e}")
+
+    # Fallback: check static/docs directory
+    clean_filename = os.path.basename(clean_path)
+    static_path = os.path.join(os.path.dirname(__file__), 'static', 'docs', clean_filename)
+    if os.path.exists(static_path):
+        try:
+            with open(static_path, 'rb') as f:
+                return f.read()
+        except Exception:
+            pass
+
+    return None
+
+def delete_from_firebase_storage(file_path, bucket_name=None):
+    """Deletes a file from Firebase Storage."""
+    if not file_path:
+        return False
+    clean_path = str(file_path).lstrip('/')
+    db = get_firebase_db()
+    if HAS_FIREBASE_SDK and db:
+        try:
+            b_name = bucket_name or DEFAULT_STORAGE_BUCKET
+            bucket = storage.bucket(b_name)
+            blob = bucket.blob(clean_path)
+            if blob.exists():
+                blob.delete()
+                return True
+        except Exception as e:
+            logging.warning(f"[FIREBASE DELETE WARNING] {e}")
+    return False
+
+delete_from_supabase_storage = delete_from_firebase_storage
+
 def generate_firebase_preview_url(file_path, bucket_name=None):
     """Generates preview URL for document."""
-    clean_filename = os.path.basename(file_path or 'document.pdf')
-    return f"/static/docs/{clean_filename}"
+    if not file_path:
+        return "/static/docs/sample.pdf"
+    clean_path = str(file_path).lstrip('/')
+    if clean_path.startswith("http://") or clean_path.startswith("https://"):
+        return clean_path
+    b_name = bucket_name or DEFAULT_STORAGE_BUCKET
+    encoded_path = urllib.parse.quote(clean_path, safe='')
+    return f"https://firebasestorage.googleapis.com/v0/b/{b_name}/o/{encoded_path}?alt=media"
 
 generate_document_preview_url = generate_firebase_preview_url
