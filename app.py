@@ -883,7 +883,7 @@ def api_upload_document():
             pass
 
     from firebase_client import DEFAULT_STORAGE_BUCKET as STORAGE_BUCKET, upload_to_firebase_storage as upload_to_supabase_storage, delete_from_firebase_storage as delete_from_supabase_storage
-    storage_path = f"MedicalStores/{shop_code}/{category}/{file_name}"
+    storage_path = f"documents/{shop_code}/{category}/{file_name}"
     file_url = f"/static/docs/{file_name}"
     size_kb = random.randint(150, 800)
     mime_type = file.mimetype if file and hasattr(file, 'mimetype') else 'application/pdf'
